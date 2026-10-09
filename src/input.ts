@@ -10,6 +10,8 @@ export interface InputState {
   actionPressed: boolean;
   resetPressed: boolean;
   mutePressed: boolean;
+  mapPressed: boolean;
+  closeMapPressed: boolean;
   anyPressed: boolean;
 }
 
@@ -31,12 +33,14 @@ export class Input {
     actionPressed: false,
     resetPressed: false,
     mutePressed: false,
+    mapPressed: false,
+    closeMapPressed: false,
     anyPressed: false,
   };
 
   constructor() {
     window.addEventListener("keydown", (e) => {
-      if (e.code.startsWith("Arrow") || e.code === "Space") e.preventDefault();
+      if (e.code.startsWith("Arrow") || e.code === "Space" || e.code === "Tab") e.preventDefault();
       if (!e.repeat) this.pressed.add(e.code);
       this.down.add(e.code);
     });
@@ -85,6 +89,8 @@ export class Input {
     s.actionPressed = actionPressed;
     s.resetPressed = resetPressed;
     s.mutePressed = mutePressed;
+    s.mapPressed = this.pressed.has("Tab");
+    s.closeMapPressed = this.pressed.has("Escape");
     s.anyPressed = anyPressed;
     this.pressed.clear();
   }

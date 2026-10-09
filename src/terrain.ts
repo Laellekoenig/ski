@@ -1,14 +1,14 @@
 import * as THREE from "three";
 import { createNoise2D, fbm, ridged, clamp, lerp, smoothstep } from "./noise";
-import { CHALETS, CHURCH, KICKERS, LAKE, LIFTS, PISTES, type V2 } from "./layout";
+import { CHALETS, CHURCH, KICKERS, LAKES, LIFTS, PISTES, landscapeAt, type V2 } from "./layout";
 import { snowNormalMap } from "./materials";
 
 // High-res playable grid
-const X0 = -500;
-const Z0 = -720;
-const CELL = 2;
-const NX = 501;
-const NZ = 721;
+const X0 = -1380;
+const Z0 = -1380;
+const CELL = 4;
+const NX = 691;
+const NZ = 691;
 const X1 = X0 + (NX - 1) * CELL;
 const Z1 = Z0 + (NZ - 1) * CELL;
 
@@ -41,65 +41,35 @@ export function smoothPath(points: V2[], perSegment = 8): V2[] {
  * The analytic mountain. `groom` in [0,1] smooths out the small bumps (pistes are groomed).
  */
 export function baseHeight(x: number, z: number, groom = 0): number {
-  // Main face: concave profile from summit down to the valley floor
-  const t = clamp((z + 600) / 1150, 0, 1);
-  let h = 360 * Math.pow(1 - t, 1.5);
-  // behind the summit the ground drops away into a col
-  if (z < -600) h -= Math.pow((-600 - z) / 120, 2) * 40;
-  // the valley keeps descending gently past the village
-  if (z > 550) h -= (z - 550) * 0.04;
-
-  // Summit pyramid
-  const sx = x / 95;
-  const sz = (z + 605) / 75;
-  h += 95 * Math.exp(-(sx * sx + sz * sz)) + 25 * Math.exp(-(sx * sx * 4 + sz * sz * 4));
-
-  // Valley walls, wavy
-  const ax = Math.abs(x + 25 * noiseB(z * 0.004, 3.1));
-  const wall = smoothstep(290, 540, ax);
-  h += 300 * wall * wall + 110 * wall * ridged(noiseC, x * 0.0025, z * 0.0025, 3);
-
-  // Rolling shapes (gullies, shoulders). Simplex has a max derivative of ~6, so keep amp*freq small.
-  const big = fbm(noiseA, x * 0.0025, z * 0.0025, 2);
-  const medium = fbm(noiseC, x * 0.012, z * 0.012, 2);
-  h += big * 18 * (0.4 + 0.6 * smoothstep(-650, -100, z)) + medium * 3;
-
-  // Small bumps / moguls, mostly off-piste
-  const small = fbm(noiseB, x * 0.06, z * 0.06, 2) * 0.55 + noiseC(x * 0.2, z * 0.2) * 0.06;
-  h += small * (1 - groom * 0.85);
-
-  // Far mountains, outside the playable area
-  const dx = Math.max(0, Math.abs(x) - 520);
-  const dzBack = Math.max(0, -z - 760);
-  const dzFront = Math.max(0, z - 760);
-  const d = Math.sqrt(dx * dx + dzBack * dzBack + dzFront * dzFront * 0.15);
-  if (d > 0) {
-    const farMask = smoothstep(0, 700, d);
-    // keep the valley ahead open so you can see down to the Matterhorn
-    const valley = smoothstep(500, 1600, z) * (1 - smoothstep(250, 900, Math.abs(x - 150)));
-    // soft, rounded massifs rather than spiky noise: clay mountains
-    const massif = ridged(noiseA, x * 0.0009, z * 0.0009, 4) * 900 + fbm(noiseB, x * 0.0006, z * 0.0006, 2) * 200;
-    h += farMask * (1 - valley * 0.85) * (massif + 150);
-  }
-  // Matterhorn-ish pyramid down the valley
-  {
-    const mx = x - 420;
-    const mz = z - 2900;
-    const r = Math.sqrt(mx * mx + mz * mz);
-    const linf = Math.max(Math.abs(mx * 0.7 + mz * 0.7), Math.abs(mx * 0.7 - mz * 0.7));
-    const k = Math.max(0, 1 - (0.55 * linf + 0.45 * r) / 750);
-    h += 1500 * Math.pow(k, 1.6);
-  }
+  const r = Math.hypot(x, z);
+  const radial = Math.max(0, r - 18);
+  // A broad, genuinely central summit, falling away on all eight faces.
+  let h = 640 * Math.pow(Math.max(0, 1 - radial / 1510), 1.4);
+  const shoulder = smoothstep(70, 240, r) * (1 - smoothstep(1100, 1500, r));
+  const angle = Math.atan2(z, x);
+  h += shoulder * (Math.sin(angle * 8 + r * 0.002) * 12 + fbm(noiseA, x * 0.003, z * 0.003, 2) * 14);
+  const rocky = smoothstep(0, 210, -x) * smoothstep(0, 210, -z) * shoulder;
+  // Granite ribs and deep gullies, with softer groomed crossings.
+  h += rocky * (Math.sin(angle * 22 + r * 0.004) * 23 + ridged(noiseC, x * 0.009, z * 0.009, 2) * 24) * (1 - groom * 0.45);
+  const powder = smoothstep(0, 180, -x) * smoothstep(0, 180, z) * shoulder;
+  const small = fbm(noiseB, x * 0.035, z * 0.035, 2);
+  h += shoulder * small * (1.2 + powder * 3.2) * (1 - groom * 0.9);
+  // Distant massifs encircle the ski area beyond an open valley.
+  const far = smoothstep(1600, 2400, r);
+  h += far * (140 + ridged(noiseA, x * 0.00045, z * 0.00045, 2) * 680 + fbm(noiseB, x * 0.0006, z * 0.0006, 2) * 100);
+  const mx = x - 600, mz = z - 3600;
+  const peak = Math.max(0, 1 - Math.hypot(mx, mz) / 900);
+  h += 1600 * Math.pow(peak, 1.7);
   return h;
 }
 
-export type Surface = "snow" | "piste" | "ice";
+export type Surface = "snow" | "piste" | "ice" | "powder" | "rock";
 
 export class Terrain {
   readonly heights = new Float32Array(NX * NZ);
-  /** distance to the nearest piste centerline (capped) */
+  /** Distance from the nearest piste edge, offset by 20; honours each trail width. */
   readonly pisteDist = new Float32Array(NX * NZ);
-  readonly lakeY: number;
+  readonly lakeHeights: number[];
   readonly mesh: THREE.Mesh;
   readonly farMesh: THREE.Mesh;
   readonly pistePaths: V2[][];
@@ -114,10 +84,12 @@ export class Terrain {
       for (let i = 0; i < NX; i++) {
         const x = X0 + i * CELL;
         const k = j * NX + i;
-        const groom = 1 - smoothstep(0, 1, (this.pisteDist[k] - 17) / 8);
+        const groom = 1 - smoothstep(17, 25, this.pisteDist[k]);
         this.heights[k] = baseHeight(x, z, groom);
       }
     }
+
+    this.groomRoutes();
 
     // flatten pads for lift stations, village & lake
     const pads: { x: number; z: number; r: number; blend: number; y: number }[] = [];
@@ -126,8 +98,9 @@ export class Terrain {
     }
     for (const c of CHALETS) pads.push({ x: c.x, z: c.z, r: 7 * c.size, blend: 8, y: this.heightAt(c.x, c.z) });
     pads.push({ x: CHURCH.x, z: CHURCH.z, r: 10, blend: 8, y: this.heightAt(CHURCH.x, CHURCH.z) });
-    this.lakeY = this.heightAt(LAKE.x, LAKE.z) - 2.5;
-    pads.push({ x: LAKE.x, z: LAKE.z, r: LAKE.radius, blend: 24, y: this.lakeY });
+    pads.push({ x: 0, z: 0, r: 14, blend: 16, y: 640 });
+    this.lakeHeights = LAKES.map((lake) => this.heightAt(lake.x, lake.z) - 2);
+    LAKES.forEach((lake, i) => pads.push({ x: lake.x, z: lake.z, r: lake.radius, blend: 62, y: this.lakeHeights[i] }));
 
     for (const pad of pads) {
       this.forCells(pad.x, pad.z, pad.r + pad.blend, (k, x, z) => {
@@ -137,31 +110,30 @@ export class Terrain {
       });
     }
 
-    // kickers
-    for (const kk of KICKERS) {
-      const pts = PISTES[kk.piste].points;
-      const c = pts[kk.point];
-      const a = pts[kk.point - 1];
-      const b = pts[kk.point + 1];
-      let dx = b.x - a.x;
-      let dz = b.z - a.z;
-      const len = Math.hypot(dx, dz);
-      dx /= len;
-      dz /= len;
-      const H = kk.height;
-      const L = 11;
-      const W = 5;
-      this.forCells(c.x, c.z, 16, (k, x, z) => {
-        const rx = x - c.x;
-        const rz = z - c.z;
-        const u = rx * dx + rz * dz; // along piste
-        const vv = Math.abs(-rx * dz + rz * dx); // across
-        if (u < -L || u > 2.5) return;
-        const side = 1 - smoothstep(W - 1.5, W + 1.5, vv);
-        let prof: number;
-        if (u <= 0) prof = Math.pow((u + L) / L, 1.8);
-        else prof = 1 - smoothstep(0, 2.5, u);
-        this.heights[k] += H * prof * side;
+    // Sculpt real takeoffs, gaps and landings into the collision heightfield.
+    for (const jump of KICKERS) {
+      const dx = Math.sin(jump.heading), dz = Math.cos(jump.heading);
+      this.forCells(jump.x, jump.z, jump.length + 48, (k, x, z) => {
+        const rx = x - jump.x, rz = z - jump.z;
+        let u = rx * dx + rz * dz;
+        const across = -rx * dz + rz * dx;
+        if (jump.kind === "hip") u += across * 0.32;
+        const side = 1 - smoothstep(jump.width - 3, jump.width + 4, Math.abs(across));
+        if (!side) return;
+        let profile = 0;
+        if (u >= -jump.length && u <= 0) profile = jump.height * Math.pow((u + jump.length) / jump.length, 1.7);
+        if (u > 0) {
+          if (jump.kind === "roller") profile = jump.height * (1 - smoothstep(0, 18, u));
+          else if (jump.kind === "tabletop") profile = jump.height * (1 - smoothstep(12, 38, u));
+          else {
+            profile = jump.height * (1 - smoothstep(0, 5, u));
+            if (jump.kind === "gap") {
+              profile -= 4 * smoothstep(3, 10, u) * (1 - smoothstep(18, 46, u));
+              profile += 1.5 * smoothstep(30, 38, u) * (1 - smoothstep(38, 62, u));
+            }
+          }
+        }
+        this.heights[k] += profile * side;
       });
     }
 
@@ -169,10 +141,44 @@ export class Terrain {
     this.farMesh = this.buildFarMesh();
   }
 
+  /** Cut traverses through the ribs at a steady downhill grade. */
+  private groomRoutes() {
+    const target = new Float32Array(NX * NZ);
+    const weight = new Float32Array(NX * NZ);
+    const blend = new Float32Array(NX * NZ);
+    this.pistePaths.forEach((path, pi) => {
+      const piste = PISTES[pi];
+      const half = piste.width / 2;
+      const reach = half + 16;
+      const distances = [0];
+      for (let i = 1; i < path.length; i++) distances.push(distances[i - 1] + Math.hypot(path[i].x - path[i - 1].x, path[i].z - path[i - 1].z));
+      const start = baseHeight(path[0].x, path[0].z, 1);
+      const end = baseHeight(path[path.length - 1].x, path[path.length - 1].z, 1);
+      const ys = path.map((p, i) => piste.connector ? lerp(start, end, distances[i] / distances[distances.length - 1]) : baseHeight(p.x, p.z, 1));
+      for (let i = 1; i < path.length; i++) {
+        const a = path[i - 1], b = path[i];
+        const dx = b.x - a.x, dz = b.z - a.z;
+        const length2 = dx * dx + dz * dz;
+        this.forCells((a.x + b.x) / 2, (a.z + b.z) / 2, Math.sqrt(length2) / 2 + reach, (k, x, z) => {
+          const u = clamp(((x - a.x) * dx + (z - a.z) * dz) / length2, 0, 1);
+          const distance = Math.hypot(x - a.x - dx * u, z - a.z - dz * u);
+          const w = 1 - smoothstep(half - 4, reach, distance);
+          if (!w) return;
+          target[k] += lerp(ys[i - 1], ys[i], u) * w;
+          weight[k] += w;
+          blend[k] = Math.max(blend[k], w);
+        });
+      }
+    });
+    for (let k = 0; k < this.heights.length; k++) {
+      if (weight[k] > 0) this.heights[k] = lerp(this.heights[k], target[k] / weight[k], blend[k]);
+    }
+  }
+
   private computePisteDistance() {
     this.pisteDist.fill(60);
     const reach = 40;
-    for (const path of this.pistePaths) {
+    for (const [pi, path] of this.pistePaths.entries()) {
       for (let s = 0; s < path.length - 1; s++) {
         const a = path[s];
         const b = path[s + 1];
@@ -194,7 +200,8 @@ export class Terrain {
             const t = clamp(((x - a.x) * abx + (z - a.z) * abz) / ab2, 0, 1);
             const d = Math.hypot(x - (a.x + abx * t), z - (a.z + abz * t));
             const k = j * NX + i;
-            if (d < this.pisteDist[k]) this.pisteDist[k] = d;
+            const edgeDistance = d + 20 - PISTES[pi].width / 2;
+            if (edgeDistance < this.pisteDist[k]) this.pisteDist[k] = edgeDistance;
           }
         }
       }
@@ -248,8 +255,12 @@ export class Terrain {
   }
 
   surfaceAt(x: number, z: number): Surface {
-    if (Math.hypot(x - LAKE.x, z - LAKE.z) < LAKE.radius - 2) return "ice";
-    return this.pisteDistanceAt(x, z) < 17 ? "piste" : "snow";
+    if (LAKES.some((lake) => Math.hypot(x - lake.x, z - lake.z) < lake.radius - 2)) return "ice";
+    if (this.pisteDistanceAt(x, z) < 20) return "piste";
+    const region = landscapeAt(x, z);
+    if (region === "powder") return "powder";
+    if (region === "rock") return "rock";
+    return "snow";
   }
 
   private buildMesh(): THREE.Mesh {
@@ -298,10 +309,10 @@ export class Terrain {
         const nv = fbm(noiseC, x * 0.02, z * 0.02, 2) * 0.5 + 0.5;
         c.copy(snowA).lerp(snowB, nv * 0.8);
         const pd = this.pisteDist[k];
-        const onPiste = 1 - smoothstep(14, 18, pd);
+        const onPiste = 1 - smoothstep(17, 22, pd);
         c.lerp(piste, onPiste * 0.85);
         // faint piste edge line
-        const edge = Math.exp(-Math.pow((pd - 17.5) / 0.9, 2));
+        const edge = Math.exp(-Math.pow((pd - 20.5) / 0.9, 2));
         c.lerp(tmp.set(0xd2dcf3), edge * 0.5);
 
         const steep = smoothstep(0.74, 0.55, n.y + noiseA(x * 0.03, z * 0.03) * 0.08);
@@ -309,8 +320,15 @@ export class Terrain {
           tmp.copy(rock).lerp(rockB, noiseB(x * 0.05, z * 0.05) * 0.5 + 0.5);
           c.lerp(tmp, steep);
         }
-        const lakeD = Math.hypot(x - LAKE.x, z - LAKE.z);
-        if (lakeD < LAKE.radius + 2) c.lerp(lakeBed, 1 - smoothstep(LAKE.radius - 6, LAKE.radius + 2, lakeD));
+        const region = landscapeAt(x, z);
+        if (region === "rock" && pd > 24) {
+          c.lerp(tmp.set(0x8d899b), smoothstep(0.97, 0.8, n.y) * 0.78);
+        }
+        if (region === "powder") c.lerp(tmp.set(0xd6eaf2), (1 - onPiste) * 0.25);
+        for (const lake of LAKES) {
+          const lakeD = Math.hypot(x - lake.x, z - lake.z);
+          if (lakeD < lake.radius + 2) c.lerp(lakeBed, 1 - smoothstep(lake.radius - 6, lake.radius + 2, lakeD));
+        }
 
         // cheap ambient occlusion from local concavity
         const r = 4;
@@ -409,7 +427,7 @@ export class Terrain {
         c.lerp(rock, steep);
         // forested lower valley slopes
         const forestMask = (1 - smoothstep(150, 320, y)) * smoothstep(0.6, 0.9, ny) * (fbm(noiseB, x * 0.003, z * 0.003, 3) > -0.1 ? 1 : 0);
-        if (Math.abs(x) > 480 || z > 700) c.lerp(forest, forestMask * 0.85);
+        if (Math.hypot(x, z) > 1550) c.lerp(forest, forestMask * 0.85);
         col[k * 3] = c.r;
         col[k * 3 + 1] = c.g;
         col[k * 3 + 2] = c.b;

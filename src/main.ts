@@ -37,8 +37,7 @@ const hud = new Hud(world);
 const audio = new Audio();
 
 let best = Number(localStorage.getItem(BEST_KEY) ?? 0) || 0;
-const summitLift = world.lifts[0];
-player.spawnAtTop(summitLift);
+player.spawnAtSummit();
 
 function endRun(distance: number) {
   if (distance > best && distance > 20) {
@@ -116,8 +115,9 @@ function updateCamera(dt: number) {
     let dy = targetYaw - camYaw;
     dy = Math.atan2(Math.sin(dy), Math.cos(dy));
     camYaw += dy * damp(player.state === "crash" ? 0.5 : 3.2, dt);
-    const dist = 5.2 + Math.min(speed, 30) * 0.07;
-    const height = 2.3 + Math.min(speed, 30) * 0.025;
+    const summitView = Math.max(0, 1 - Math.hypot(p.x, p.z) / 180);
+    const dist = 5.2 + Math.min(speed, 30) * 0.07 + summitView * 10;
+    const height = 2.3 + Math.min(speed, 30) * 0.025 + summitView * 10;
     const want = tmpV.set(p.x - Math.sin(camYaw) * dist, p.y + height, p.z - Math.cos(camYaw) * dist);
     // the slope ahead is lower: keep the camera above the ground behind us
     const ground = world.terrain.heightAt(want.x, want.z) + 1.6;
@@ -127,6 +127,13 @@ function updateCamera(dt: number) {
     if (camPos.y < camGround) camPos.y = camGround;
     const look = tmpV.set(p.x + Math.sin(camYaw) * 3, p.y + 0.9, p.z + Math.cos(camYaw) * 3);
     camLook.lerp(look, damp(14, dt));
+    // Keep the skier visible when the camera is still behind a takeoff lip.
+    for (let u = 0.15; u < 0.9; u += 0.15) {
+      const x = lerp(camPos.x, p.x, u);
+      const z = lerp(camPos.z, p.z, u);
+      const clearance = world.terrain.heightAt(x, z) + 0.5 - lerp(camPos.y, p.y + 1, u);
+      if (clearance > 0) camPos.y += clearance / (1 - u);
+    }
     camera.fov = lerp(camera.fov, 55 + Math.min(1, speed / 32) * 14, damp(2, dt));
   }
   camera.position.copy(camPos);
@@ -151,7 +158,7 @@ document.getElementById("loading")!.style.opacity = "0";
 setTimeout(() => document.getElementById("loading")?.remove(), 700);
 
 // ---- loop
-const debug = { freezeCamera: false };
+const debug = { freezeCamera: false, pauseSimulation: false };
 const STEP = 1 / 120;
 let acc = 0;
 let last = performance.now();
@@ -168,11 +175,14 @@ function frame(now: number) {
   if (!started && st.anyPressed) start();
   if (st.mutePressed) audio.toggleMute();
 
-  if (started) {
-    if (st.resetPressed && player.state !== "lift") {
+  if (started && st.mapPressed) hud.toggleMap();
+  if (st.closeMapPressed && hud.mapOpen) hud.toggleMap(false);
+
+  if (started && !hud.mapOpen && !debug.pauseSimulation) {
+    if (st.resetPressed) {
       endRun(player.runDistance);
       player.runDistance = 0;
-      player.spawnAtTop(summitLift);
+      player.spawnAtSummit();
       snapCamera();
     }
     acc += dt;
@@ -186,7 +196,7 @@ function frame(now: number) {
         first = false;
       }
     }
-  } else {
+  } else if (!started) {
     player.idle(dt, { ...st, steer: 0, tuck: false, brake: false });
   }
 
@@ -197,8 +207,8 @@ function frame(now: number) {
   let prompt = "";
   if (player.state === "lift" && player.lift) prompt = `riding ${player.lift.def.name} · hold <kbd>Space</kbd> to hurry`;
   else if (player.nearbyLift) prompt = `<kbd>E</kbd> ride the ${player.nearbyLift.def.name}`;
-  hud.update(player.runDistance, best, player.speed, started ? prompt : "", player.pos.x, player.pos.z, player.heading);
-  audio.update(player.speed, player.skid, player.grounded, player.state === "lift");
+  hud.update(player.runDistance, best, player.speed, started ? prompt : "", player.pos.x, player.pos.z, player.heading, player.surface);
+  audio.update(hud.mapOpen ? 0 : player.speed, player.skid, player.grounded, player.state === "lift");
 
   renderer.render(world.scene, camera);
 }
@@ -219,5 +229,5 @@ if (import.meta.env.DEV) {
     }
     renderer.render(world.scene, camera);
   };
-  Object.assign(window, { game: { player, world, camera, renderer, input, sim, snapCamera, debug } });
+  Object.assign(window, { game: { player, world, camera, renderer, input, hud, sim, snapCamera, debug } });
 }

@@ -6,11 +6,12 @@ import { RIDE_SPEED } from "./lifts";
 import type { InputState } from "./input";
 import type { Particles } from "./particles";
 import type { Trails } from "./trails";
-import { BOUNDS } from "./layout";
+import { BOUNDS, KICKERS, SUMMIT } from "./layout";
+import type { Surface } from "./terrain";
 import { damp, lerp } from "./noise";
 
 const G = 9.81;
-const MU = { piste: 0.04, snow: 0.08, ice: 0.006 };
+const MU = { piste: 0.04, snow: 0.08, ice: 0.006, powder: 0.19, rock: 0.11 };
 const DRAG = 0.0095;
 const DRAG_TUCK = 0.0058;
 const BOARD_RADIUS = 13;
@@ -43,7 +44,7 @@ export class Player {
   rideS = 0;
   /** 0..1, how much the skis are skidding (for sfx/spray) */
   skid = 0;
-  surface: "piste" | "snow" | "ice" = "piste";
+  surface: Surface = "piste";
   events: PlayerEvents = {};
 
   private world: World;
@@ -93,6 +94,26 @@ export class Player {
     return this.vel.length();
   }
 
+  /** Every new run starts at the same central peak, ready to choose a face. */
+  spawnAtSummit() {
+    if (this.lift) this.lift.rideChair.visible = false;
+    this.pos.set(SUMMIT.x, this.world.terrain.heightAt(SUMMIT.x, SUMMIT.z), SUMMIT.z);
+    this.heading = Math.PI / 4;
+    this.resetMotion();
+    this.vel.set(0, 0, 0);
+  }
+
+  private resetMotion() {
+    this.state = "ski";
+    this.grounded = true;
+    this.lift = null;
+    this.nearbyLift = null;
+    this.airTime = this.spin = this.crashTimer = this.tumble = this.steer = this.skid = 0;
+    this.world.terrain.normalAt(this.pos.x, this.pos.z, this.n);
+    this.visN.copy(this.n);
+    this.trails.break();
+  }
+
   /** Place the skier at a lift's top exit, facing downhill. */
   spawnAtTop(lift: Lift) {
     const p = this.tmp.copy(lift.top).addScaledVector(lift.right, 9).addScaledVector(lift.dir, -4);
@@ -104,10 +125,7 @@ export class Player {
     const dz = Math.abs(n.x) + Math.abs(n.z) > 0.05 ? n.z : -lift.dir.z;
     this.heading = Math.atan2(dx, dz);
     this.vel.set(Math.sin(this.heading), 0, Math.cos(this.heading)).multiplyScalar(2);
-    this.state = "ski";
-    this.grounded = true;
-    this.lift = null;
-    this.trails.break();
+    this.resetMotion();
   }
 
   update(dt: number, input: InputState) {
@@ -229,7 +247,7 @@ export class Player {
           vf *= f;
           vl *= f;
         }
-        const drag = tuck ? DRAG_TUCK : DRAG;
+        const drag = (tuck ? DRAG_TUCK : DRAG) * (this.surface === "powder" ? 1.7 : 1);
         vf -= Math.sign(vf) * drag * vf * vf * dt;
 
         // skating / pushing off when slow
@@ -261,6 +279,30 @@ export class Player {
     }
 
     this.pos.addScaledVector(this.vel, dt);
+
+    // A shaped lip gives a little pop. Crossing the lip (rather than proximity)
+    // makes this work at any frame rate, without boosting reverse approaches or landings.
+    if (this.grounded && !crashed && this.speed > 8) {
+      for (const jump of KICKERS) {
+        const dx = Math.sin(jump.heading), dz = Math.cos(jump.heading);
+        const local = (p: THREE.Vector3) => {
+          const x = p.x - jump.x, z = p.z - jump.z;
+          const across = -x * dz + z * dx;
+          return { along: x * dx + z * dz + (jump.kind === "hip" ? across * 0.32 : 0), across };
+        };
+        const a = local(before), b = local(this.pos);
+        const forwardSpeed = this.vel.x * dx + this.vel.z * dz;
+        if (a.along < 0 && b.along >= 0 && Math.abs(b.across) < jump.width - 2 && forwardSpeed > 8) {
+          this.vel.y += 2.2 + Math.min(30, forwardSpeed) * (jump.height / jump.length) * 0.35;
+          this.pos.y = Math.max(this.pos.y, t.heightAt(this.pos.x, this.pos.z) + 0.08);
+          this.grounded = false;
+          this.airTime = this.spin = 0;
+          this.squash = 0.25;
+          this.events.onJump?.();
+          break;
+        }
+      }
+    }
 
     // soft world bounds
     const clampAxis = (axis: "x" | "z", min: number, max: number) => {
@@ -432,7 +474,7 @@ export class Player {
       this.trails.break();
     }
     if (this.grounded && !seated && this.speed > 3) {
-      const rate = (this.skid * 90 + (this.speed > 15 ? (this.speed - 15) * 2 : 0)) * (this.surface === "ice" ? 0.2 : 1);
+      const rate = (this.skid * 90 + (this.speed > 15 ? (this.speed - 15) * 2 : 0) + (this.surface === "powder" ? this.speed * 3 : 0)) * (this.surface === "ice" ? 0.2 : 1);
       this.sprayAcc += rate * dt;
       while (this.sprayAcc > 1) {
         this.sprayAcc -= 1;
@@ -444,7 +486,7 @@ export class Player {
           new THREE.Vector3((Math.random() - 0.5) * 2, 1.2 + Math.random() * 2.2, (Math.random() - 0.5) * 2)
             .addScaledVector(this.vel, 0.35)
             .addScaledVector(this.lat, side * (1.5 + this.skid * 3)),
-          { size: 0.08 + Math.random() * 0.14, life: 0.5 + Math.random() * 0.4, drag: 2 },
+          { size: (this.surface === "powder" ? 0.2 : 0.08) + Math.random() * 0.14, life: 0.5 + Math.random() * 0.4, drag: 2 },
         );
       }
     }
