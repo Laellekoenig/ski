@@ -95,6 +95,7 @@ player.events = {
   onLand: (impact) => audio.land(impact),
   onCrash: () => audio.crash(),
   onTrick: () => audio.trick(),
+  onSwing: () => audio.swing(),
   onFinish: endRun,
 };
 
@@ -338,6 +339,7 @@ function frame(now: number) {
       if (first) {
         // edge-triggered inputs only fire once per frame
         st.jumpPressed = st.actionPressed = false;
+        st.swingPressed = 0;
         first = false;
       }
     }
@@ -365,7 +367,7 @@ if (import.meta.env.DEV) {
     start(true);
     const n = Math.round(seconds / STEP);
     for (let i = 0; i < n; i++) {
-      player.update(STEP, { ...input.state, ...keys, jumpPressed: i === 0 && !!keys.jumpPressed, actionPressed: i === 0 && !!keys.actionPressed });
+      player.update(STEP, { ...input.state, ...keys, jumpPressed: i === 0 && !!keys.jumpPressed, actionPressed: i === 0 && !!keys.actionPressed, swingPressed: i === 0 ? keys.swingPressed ?? 0 : 0 });
       particles.update(STEP);
       world.update(player.pos, STEP);
       updateLook(STEP, { ...input.state, lookDX: 0, lookDY: 0 });

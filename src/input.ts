@@ -9,6 +9,8 @@ export interface InputState {
   brake: boolean;
   jumpHeld: boolean;
   jumpPressed: boolean;
+  /** Double-tapped A / D this frame: -1 swings left, 1 right, 0 none. */
+  swingPressed: number;
   actionPressed: boolean;
   resetPressed: boolean;
   mutePressed: boolean;
@@ -36,11 +38,15 @@ const GENTLE_STEER = 0.4;
 const UP = ["KeyW", "ArrowUp"];
 const DOWN = ["KeyS", "ArrowDown"];
 const DUCK = ["ShiftLeft", "ShiftRight"];
+/** Second tap on the same side within this many ms counts as a double tap. */
+const DOUBLE_TAP_MS = 280;
 
 export class Input {
   private down = new Set<string>();
   private pressed = new Set<string>();
   private padPrev: boolean[] = [];
+  private lastTap = { side: 0, at: -Infinity };
+  private swing = 0;
   private dragId: number | null = null;
   private dragX = 0;
   private dragY = 0;
@@ -53,6 +59,7 @@ export class Input {
     brake: false,
     jumpHeld: false,
     jumpPressed: false,
+    swingPressed: 0,
     actionPressed: false,
     resetPressed: false,
     mutePressed: false,
@@ -71,13 +78,17 @@ export class Input {
   constructor() {
     window.addEventListener("keydown", (e) => {
       if (e.code.startsWith("Arrow") || e.code === "Space") e.preventDefault();
-      if (!e.repeat) this.pressed.add(e.code);
+      if (!e.repeat) {
+        this.pressed.add(e.code);
+        this.tap(e.code, e.timeStamp);
+      }
       this.down.add(e.code);
     });
     window.addEventListener("keyup", (e) => this.down.delete(e.code));
     window.addEventListener("blur", () => {
       this.down.clear();
       this.pressed.clear();
+      this.swing = 0;
     });
     const canvas = document.getElementById("game")!;
     canvas.addEventListener("pointerdown", (e) => {
@@ -101,6 +112,16 @@ export class Input {
     canvas.addEventListener("pointerup", release);
     canvas.addEventListener("pointercancel", release);
     canvas.addEventListener("lostpointercapture", release);
+  }
+
+  private tap(code: string, at: number) {
+    const side = RIGHT.includes(code) ? 1 : LEFT.includes(code) ? -1 : 0;
+    if (!side) return;
+    if (this.lastTap.side === side && at - this.lastTap.at < DOUBLE_TAP_MS) {
+      this.swing = side;
+      // a third tap starts a fresh pair instead of swinging again
+      this.lastTap = { side: 0, at: -Infinity };
+    } else this.lastTap = { side, at };
   }
 
   private any(codes: string[]) {
@@ -159,6 +180,8 @@ export class Input {
     s.brake = brake;
     s.jumpHeld = jumpHeld;
     s.jumpPressed = jumpPressed;
+    s.swingPressed = this.swing;
+    this.swing = 0;
     s.actionPressed = actionPressed;
     s.resetPressed = resetPressed;
     s.mutePressed = mutePressed;

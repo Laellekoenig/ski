@@ -129,6 +129,9 @@ export class Audio {
     this.burst(0.25, 900, Math.min(0.6, 0.15 + impact * 0.04));
     this.tone(120, 60, 0.15, "sine", Math.min(0.4, impact * 0.03));
   }
+  swing() {
+    this.burst(0.45, 2600, 0.35);
+  }
   crash() {
     this.burst(0.6, 1500, 0.6);
     this.tone(500, 140, 0.45, "triangle", 0.18);
