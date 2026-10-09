@@ -5,9 +5,9 @@
 A cosy little browser ski game inspired by *A Short Hike*. One Swiss mountain, three chairlifts, and a single question: how far can you ski before taking the lift back up?
 
 ```sh
-npm install
-npm run dev     # http://localhost:5173
-npm run build   # static build in dist/
+bun install
+bun run dev     # http://localhost:5173
+bun run build   # static build in dist/
 ```
 
 ## Controls
