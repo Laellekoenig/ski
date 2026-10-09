@@ -14,6 +14,17 @@ export interface InputState {
   /** Zero-based roster slot; -1 when no number key was pressed. */
   characterPressed: number;
   characterStep: number;
+  mapPressed: boolean;
+  closeMapPressed: boolean;
+  pausePressed: boolean;
+  /** pause menu navigation, edge-triggered */
+  menuUp: boolean;
+  menuDown: boolean;
+  confirmPressed: boolean;
+  /** mouse drag-to-look: held, plus pixels moved since last frame */
+  looking: boolean;
+  lookDX: number;
+  lookDY: number;
 }
 
 const LEFT = ["KeyA", "ArrowLeft"];
@@ -25,6 +36,11 @@ export class Input {
   private down = new Set<string>();
   private pressed = new Set<string>();
   private padPrev: boolean[] = [];
+  private dragId: number | null = null;
+  private dragX = 0;
+  private dragY = 0;
+  private lastX = 0;
+  private lastY = 0;
   readonly state: InputState = {
     steer: 0,
     tuck: false,
@@ -37,11 +53,20 @@ export class Input {
     startPressed: false,
     characterPressed: -1,
     characterStep: 0,
+    mapPressed: false,
+    closeMapPressed: false,
+    pausePressed: false,
+    menuUp: false,
+    menuDown: false,
+    confirmPressed: false,
+    looking: false,
+    lookDX: 0,
+    lookDY: 0,
   };
 
   constructor() {
     window.addEventListener("keydown", (e) => {
-      if (e.code.startsWith("Arrow") || e.code === "Space") e.preventDefault();
+      if (e.code.startsWith("Arrow") || e.code === "Space" || (e.code === "Tab" && document.getElementById("title")!.classList.contains("hidden"))) e.preventDefault();
       if (!e.repeat) this.pressed.add(e.code);
       this.down.add(e.code);
     });
@@ -50,6 +75,28 @@ export class Input {
       this.down.clear();
       this.pressed.clear();
     });
+    const canvas = document.getElementById("game")!;
+    canvas.addEventListener("pointerdown", (e) => {
+      if (e.button !== 0 || this.dragId !== null) return;
+      this.dragId = e.pointerId;
+      this.lastX = e.clientX;
+      this.lastY = e.clientY;
+      canvas.setPointerCapture(e.pointerId);
+    });
+    canvas.addEventListener("pointermove", (e) => {
+      if (e.pointerId !== this.dragId) return;
+      this.dragX += e.clientX - this.lastX;
+      this.dragY += e.clientY - this.lastY;
+      this.lastX = e.clientX;
+      this.lastY = e.clientY;
+    });
+    const release = (e: PointerEvent) => {
+      if (e.pointerId !== this.dragId) return;
+      this.dragId = null;
+    };
+    canvas.addEventListener("pointerup", release);
+    canvas.addEventListener("pointercancel", release);
+    canvas.addEventListener("lostpointercapture", release);
   }
 
   private any(codes: string[]) {
@@ -73,6 +120,10 @@ export class Input {
       if (match) characterPressed = Number(match[1]) - 1;
     }
     let characterStep = (this.pressed.has("ArrowRight") ? 1 : 0) - (this.pressed.has("ArrowLeft") ? 1 : 0);
+    let pausePressed = this.pressed.has("Escape") || this.pressed.has("KeyP");
+    let menuUp = UP.some((c) => this.pressed.has(c));
+    let menuDown = DOWN.some((c) => this.pressed.has(c));
+    let confirmPressed = jumpPressed || actionPressed;
 
     const pad = navigator.getGamepads?.().find((p) => p && p.connected);
     if (pad) {
@@ -88,6 +139,10 @@ export class Input {
       resetPressed ||= edge(3);
       startPressed ||= edge(0) || edge(9);
       characterStep += (edge(15) || edge(5) ? 1 : 0) - (edge(14) || edge(4) ? 1 : 0);
+      pausePressed ||= edge(9);
+      menuUp ||= edge(12);
+      menuDown ||= edge(13);
+      confirmPressed ||= edge(0);
       this.padPrev = pad.buttons.map((x) => x.pressed);
     } else this.padPrev = [];
 
@@ -102,6 +157,16 @@ export class Input {
     s.startPressed = startPressed;
     s.characterPressed = characterPressed;
     s.characterStep = characterStep;
+    s.mapPressed = this.pressed.has("Tab");
+    s.closeMapPressed = this.pressed.has("Escape");
+    s.pausePressed = pausePressed;
+    s.menuUp = menuUp;
+    s.menuDown = menuDown;
+    s.confirmPressed = confirmPressed;
+    s.looking = this.dragId !== null;
+    s.lookDX = this.dragX;
+    s.lookDY = this.dragY;
+    this.dragX = this.dragY = 0;
     this.pressed.clear();
   }
 }

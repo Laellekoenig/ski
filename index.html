@@ -9,7 +9,7 @@
   <body>
     <canvas id="game"></canvas>
 
-    <div id="hud" class="hidden">
+    <div id="hud" class="hidden" inert>
       <div class="card score">
         <div class="label">this run</div>
         <div class="big"><span id="dist">0</span><small>m</small></div>
@@ -17,10 +17,27 @@
       </div>
       <div class="card speedo"><span id="speed">0</span><small>km/h</small></div>
       <div class="card skier-badge"><span class="skier-badge-dot"></span><span id="current-character">Beni</span><span id="current-species">Alpine ibex</span></div>
-      <div class="card map"><canvas id="minimap"></canvas></div>
+      <div class="card location"><div id="region-name">Vierwind summit</div><div id="conditions"></div><span id="altitude">640 m</span></div>
+      <button class="card map" id="open-map" aria-label="Open trail map" aria-expanded="false">
+        <span class="map-heading">VIERWIND <span>N ↑</span></span>
+        <canvas id="minimap" aria-label="Mountain minimap"></canvas>
+        <span class="map-footer">Trail map <kbd>Tab</kbd></span>
+      </button>
       <div id="prompt"></div>
       <div id="toasts"></div>
     </div>
+
+    <section id="map-panel" role="dialog" aria-modal="true" aria-labelledby="map-title" hidden>
+      <div class="map-sheet">
+        <header><div><span class="eyebrow">ONE MOUNTAIN. YOUR OWN WAY DOWN.</span><h2 id="map-title">Vierwind trail map</h2></div><button id="close-map" aria-label="Close trail map">✕</button></header>
+        <div class="map-body"><canvas id="trail-map" aria-label="Eight descents from the central summit, connected by sixteen traverses; frozen lakes and jumps marked"></canvas>
+          <aside><p class="map-intro">Start at the center.<br>Follow your curiosity.</p><p>8 faces · 28 trails<br>3 lakes · 15 jumps</p>
+            <div class="map-legend"><span><i class="blue"></i>Easy descent</span><span><i class="red"></i>Steeper descent</span><span><i class="black"></i>Expert chute</span><span><i class="teal"></i>Connecting traverse</span><span><i class="lift"></i>Return lift</span><span><i class="jump"></i>Jump / transfer</span></div>
+            <p class="map-note">The same mountain, every run.<br>Learn a line. Find another.</p><p class="map-note">2.64 × 2.64 km<br>640 m summit</p>
+          </aside></div>
+        <footer><span>Paused · plan your next line</span><span><kbd>Tab</kbd> / <kbd>Esc</kbd> back to the snow</span></footer>
+      </div>
+    </section>
 
     <div id="title" aria-label="Choose your skier">
       <div class="title-card">
@@ -49,12 +66,24 @@
           <span><kbd>Space</kbd> jump</span>
           <span><kbd>E</kbd> lift</span>
           <span><kbd>R</kbd> summit</span>
+          <span><kbd>Tab</kbd> trail map</span>
+          <span><kbd>Esc</kbd> pause</span>
+          <span>drag to look</span>
           <span><kbd>M</kbd> mute</span>
         </footer>
       </div>
     </div>
 
-    <div id="loading">sculpting the mountain…</div>
+    <div id="pause" class="hidden" inert>
+      <div class="pause-card">
+        <h2>Paused</h2>
+        <button data-choice="continue">Continue</button>
+        <button data-choice="reset">Reset run</button>
+        <p class="hint"><kbd>Esc</kbd> to keep skiing</p>
+      </div>
+    </div>
+
+    <div id="loading">opening Vierwind mountain…</div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>
