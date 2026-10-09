@@ -1,7 +1,7 @@
 import * as THREE from "three";
 
-/** Lines of vertical resolution to aim for, like a late-90s console on a TV. */
-const TARGET_LINES = 240;
+/** Lines of vertical resolution to aim for: chunky enough to read as pixels, fine enough to stay readable (à la A Short Hike). */
+const TARGET_LINES = 360;
 
 /** Renders the scene into a small, unsmoothed buffer, then blows it up with chunky pixels. */
 export class RetroFilter {
