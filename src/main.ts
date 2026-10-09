@@ -37,10 +37,10 @@ const input = new Input();
 const hud = new Hud(world);
 const audio = new Audio();
 const pause = new PauseMenu();
+let overlayChanged = false;
 
 let best = Number(localStorage.getItem(BEST_KEY) ?? 0) || 0;
-const summitLift = world.lifts[0];
-player.spawnAtTop(summitLift);
+player.spawnAtSummit();
 
 function endRun(distance: number) {
   if (distance > best && distance > 20) {
@@ -56,18 +56,27 @@ function endRun(distance: number) {
 function resetRun() {
   endRun(player.runDistance);
   player.runDistance = 0;
-  player.spawnAtTop(summitLift);
+  player.spawnAtSummit();
   snapCamera();
 }
 
-function syncCursor() {
-  document.body.classList.toggle("playing", started && !pause.open);
+function syncOverlays() {
+  const paused = pause.open || hud.mapOpen;
+  document.body.classList.toggle("playing", started && !paused);
+  document.getElementById("hud")!.inert = paused;
+  audio.setPaused(paused);
 }
+
+hud.onMapChange = () => {
+  overlayChanged = true;
+  syncOverlays();
+};
 
 function setPaused(paused: boolean) {
   pause.show(paused);
-  audio.setPaused(paused);
-  syncCursor();
+  overlayChanged = true;
+  if (paused) hud.toggleMap(false);
+  syncOverlays();
 }
 
 pause.onChoose = (choice) => {
@@ -185,8 +194,9 @@ function updateCamera(dt: number) {
     let dy = targetYaw - camYaw;
     dy = Math.atan2(Math.sin(dy), Math.cos(dy));
     camYaw += dy * damp(player.state === "crash" ? 0.5 : 3.2, dt);
-    const dist = 5.2 + Math.min(speed, 30) * 0.07;
-    const height = 2.3 + Math.min(speed, 30) * 0.025;
+    const summitView = Math.max(0, 1 - Math.hypot(p.x, p.z) / 180);
+    const dist = 5.2 + Math.min(speed, 30) * 0.07 + summitView * 10;
+    const height = 2.3 + Math.min(speed, 30) * 0.025 + summitView * 10;
     const want = tmpV.set(p.x - Math.sin(camYaw) * dist, p.y + height, p.z - Math.cos(camYaw) * dist);
     // the slope ahead is lower: keep the camera above the ground behind us
     const ground = world.terrain.heightAt(want.x, want.z) + 1.6;
@@ -196,6 +206,13 @@ function updateCamera(dt: number) {
     if (camPos.y < camGround) camPos.y = camGround;
     const look = tmpV.set(p.x + Math.sin(camYaw) * 3, p.y + 0.9, p.z + Math.cos(camYaw) * 3);
     camLook.lerp(look, damp(14, dt));
+    // Keep the skier visible when the camera is still behind a takeoff lip.
+    for (let u = 0.15; u < 0.9; u += 0.15) {
+      const x = lerp(camPos.x, p.x, u);
+      const z = lerp(camPos.z, p.z, u);
+      const clearance = world.terrain.heightAt(x, z) + 0.5 - lerp(camPos.y, p.y + 1, u);
+      if (clearance > 0) camPos.y += clearance / (1 - u);
+    }
     camera.fov = lerp(camera.fov, 55 + Math.min(1, speed / 32) * 14, damp(2, dt));
   }
   applyLook();
@@ -210,7 +227,7 @@ function start() {
   started = true;
   hud.showTitle(false);
   audio.start();
-  syncCursor();
+  syncOverlays();
 }
 
 window.addEventListener("resize", () => {
@@ -222,11 +239,18 @@ document.getElementById("loading")!.style.opacity = "0";
 setTimeout(() => document.getElementById("loading")?.remove(), 700);
 
 // ---- loop
-const debug = { freezeCamera: false };
+const debug = { freezeCamera: false, pauseSimulation: false };
 const STEP = 1 / 120;
 let acc = 0;
 let last = performance.now();
 let time = 0;
+
+function updateHud() {
+  let prompt = "";
+  if (player.state === "lift" && player.lift) prompt = `riding ${player.lift.def.name} · hold <kbd>Space</kbd> to hurry`;
+  else if (player.nearbyLift) prompt = `<kbd>E</kbd> ride the ${player.nearbyLift.def.name}`;
+  hud.update(player.runDistance, best, player.speed, started ? prompt : "", player.pos.x, player.pos.z, player.heading, player.surface);
+}
 
 function frame(now: number) {
   requestAnimationFrame(frame);
@@ -235,21 +259,29 @@ function frame(now: number) {
 
   input.update();
   const st = input.state;
-  const wasPaused = pause.open;
+  const wasPaused = pause.open || hud.mapOpen;
   if (!started && st.anyPressed) start();
-  else if (started && st.pausePressed) setPaused(!pause.open);
+  else if (hud.mapOpen) {
+    // Escape belongs to the map while it is open; P / gamepad Start opens pause.
+    if (st.closeMapPressed || st.mapPressed) hud.toggleMap(false);
+    else if (st.pausePressed) setPaused(true);
+  } else if (started && st.pausePressed) setPaused(!pause.open);
   else if (pause.open) pause.update(st);
+  else if (started && st.mapPressed) hud.toggleMap();
   if (st.mutePressed) audio.toggleMute();
 
-  // frozen while the menu is up; also skip the closing frame so its keypress doesn't jump/board
-  if (wasPaused || pause.open) {
+  // Freeze both overlays, including their closing frame, so menu input never
+  // spills into jumping/boarding. Refresh the HUD to paint a newly opened map.
+  if (wasPaused || pause.open || hud.mapOpen || overlayChanged) {
+    overlayChanged = false;
+    updateHud();
     renderer.render(world.scene, camera);
     return;
   }
   time += dt;
 
-  if (started) {
-    if (st.resetPressed && player.state !== "lift") resetRun();
+  if (started && !debug.pauseSimulation) {
+    if (st.resetPressed) resetRun();
     acc += dt;
     let first = true;
     while (acc >= STEP) {
@@ -261,7 +293,7 @@ function frame(now: number) {
         first = false;
       }
     }
-  } else {
+  } else if (!started) {
     player.idle(dt, { ...st, steer: 0, tuck: false, brake: false });
   }
 
@@ -270,10 +302,7 @@ function frame(now: number) {
   updateLook(dt, st);
   if (!debug.freezeCamera) updateCamera(dt);
 
-  let prompt = "";
-  if (player.state === "lift" && player.lift) prompt = `riding ${player.lift.def.name} · hold <kbd>Space</kbd> to hurry`;
-  else if (player.nearbyLift) prompt = `<kbd>E</kbd> ride the ${player.nearbyLift.def.name}`;
-  hud.update(player.runDistance, best, player.speed, started ? prompt : "", player.pos.x, player.pos.z, player.heading);
+  updateHud();
   audio.update(player.speed, player.skid, player.grounded, player.state === "lift");
 
   renderer.render(world.scene, camera);
@@ -285,6 +314,7 @@ if (import.meta.env.DEV) {
   const sim = (seconds: number, keys: Partial<typeof input.state> = {}, sample?: () => void) => {
     started = true;
     hud.showTitle(false);
+    syncOverlays();
     const n = Math.round(seconds / STEP);
     for (let i = 0; i < n; i++) {
       player.update(STEP, { ...input.state, ...keys, jumpPressed: i === 0 && !!keys.jumpPressed, actionPressed: i === 0 && !!keys.actionPressed });
@@ -296,5 +326,5 @@ if (import.meta.env.DEV) {
     }
     renderer.render(world.scene, camera);
   };
-  Object.assign(window, { game: { player, world, camera, renderer, input, sim, snapCamera, debug } });
+  Object.assign(window, { game: { player, world, camera, renderer, input, hud, sim, snapCamera, debug } });
 }

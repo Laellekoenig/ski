@@ -1,80 +1,113 @@
-// Hand-authored layout of the ski area. +z is downhill (towards the valley), the summit sits at -z.
-
+// A single, permanent mountain. The summit is the origin; every compass face descends.
 export type V2 = { x: number; z: number };
-
-export interface LiftDef {
-  name: string;
-  color: number;
-  bottom: V2;
-  top: V2;
-}
-
+export interface LiftDef { name: string; color: number; bottom: V2; top: V2 }
 export interface PisteDef {
   name: string;
-  /** Swiss piste colours: blue / red / black */
   color: number;
   width: number;
   points: V2[];
+  connector?: boolean;
+}
+export type Landscape = "summit" | "rock" | "storm" | "powder" | "lakes";
+export const MAP_NAME = "Vierwind";
+export const BOUNDS = { minX: -1320, maxX: 1320, minZ: -1320, maxZ: 1320 };
+export const SUMMIT = { x: 0, z: 0 };
+const v = (x: number, z: number): V2 => ({ x, z });
+/** Compass bearing: 0 = north, 90 = east. */
+export const polar = (r: number, degrees: number): V2 => v(Math.sin(degrees * Math.PI / 180) * r, -Math.cos(degrees * Math.PI / 180) * r);
+
+export const REGIONS = {
+  summit: { name: "Vierwind summit", detail: "Choose any direction · W to push off", color: "#edb859" },
+  rock: { name: "Granite wilds", detail: "Rock chutes · cliff drops · expert terrain", color: "#ab9489" },
+  storm: { name: "Whiteout glacier", detail: "Snowstorm · low visibility · follow the poles", color: "#93b6dc" },
+  powder: { name: "Powder gardens", detail: "Deep snow · pine glades · soft landings", color: "#80af9b" },
+  lakes: { name: "Mirror lakes", detail: "Frozen lakes · slippery ice · shoreline jumps", color: "#75cbd7" },
+} as const;
+
+export function landscapeAt(x: number, z: number): Landscape {
+  if (Math.hypot(x, z) < 210) return "summit";
+  if (z < 0) return x < -70 ? "rock" : "storm";
+  return x < 0 ? "powder" : "lakes";
 }
 
-const v = (x: number, z: number): V2 => ({ x, z });
+// Eight faces, with shared junctions at 300, 560, 820 and 1160 metres from the peak.
+const names = ["Northwind", "Glacier run", "Sunrise ridge", "Mirror run", "Home run", "Powder ribbon", "Pine hollow", "Granite chute"];
+const colors = [0xd94c50, 0xd94c50, 0x337bd5, 0x337bd5, 0x337bd5, 0x337bd5, 0xd94c50, 0x353546];
+export const PISTES: PisteDef[] = names.map((name, i) => ({
+  name, color: colors[i], width: i === 7 ? 28 : 40,
+  points: [polar(24, i * 45), polar(140, i * 45 + (i % 2 ? 5 : -5)), polar(300, i * 45),
+    polar(430, i * 45 + (i % 2 ? -6 : 6)), polar(560, i * 45),
+    polar(690, i * 45 + (i % 2 ? 5 : -5)), polar(820, i * 45), polar(1160, i * 45)],
+}));
 
-export const BOUNDS = { minX: -450, maxX: 450, minZ: -690, maxZ: 690 };
+// Descending diagonal traverses form a woven network, rather than dead-end spokes.
+for (let i = 0; i < 8; i++) {
+  const a = i * 45;
+  PISTES.push({ name: `${names[i]} traverse`, color: 0x409c9a, width: 30, connector: true,
+    points: [polar(300, a), polar(365, a + 15), polar(450, a + 30), polar(560, a + 45)] });
+  PISTES.push({ name: `${names[i]} link`, color: 0x409c9a, width: 30, connector: true,
+    points: [polar(560, a), polar(630, a - 15), polar(720, a - 30), polar(820, a - 45)] });
+}
+PISTES.push(
+  { name: "Lake promenade", color: 0x337bd5, width: 36, points: [polar(820, 90), polar(900, 105), polar(1000, 115), polar(1100, 125), polar(1160, 135)] },
+  { name: "Pillow line", color: 0xd94c50, width: 30, points: [polar(300, 225), v(-310, 325), v(-365, 470), v(-525, 570), polar(820, 225)] },
+  { name: "Razorback", color: 0x353546, width: 26, points: [polar(300, 315), v(-375, -280), v(-520, -320), v(-640, -485), polar(820, 315)] },
+  { name: "Icefall escape", color: 0xd94c50, width: 30, points: [polar(560, 45), v(415, -640), v(430, -820), v(545, -1000), polar(1160, 45)] },
+);
 
 export const LIFTS: LiftDef[] = [
-  { name: "Gipfelbahn", color: 0xe8423f, bottom: v(70, 505), top: v(40, -530) },
-  { name: "Arvenlift", color: 0x3d8bd9, bottom: v(-262, 262), top: v(-232, -262) },
-  { name: "Sonnenlift", color: 0xf2a93b, bottom: v(272, 335), top: v(242, -138) },
+  { name: "Homeward lift", color: 0xe8423f, bottom: v(10, 1165), top: v(34, 64) },
+  { name: "Powder lift", color: 0x409c9a, bottom: v(-1165, -12), top: v(-65, 30) },
+  { name: "Northwind lift", color: 0x788ecb, bottom: v(-12, -1165), top: v(-30, -65) },
+  { name: "Sunrise lift", color: 0xf2a93b, bottom: v(1165, 12), top: v(65, -30) },
+  { name: "Mirror lift", color: 0x55bac5, bottom: v(835, 827), top: v(270, 242) },
+  { name: "Glade lift", color: 0x72a67a, bottom: v(-827, 835), top: v(-242, 270) },
+  { name: "Granite lift", color: 0x916f87, bottom: v(-835, -827), top: v(-270, -242) },
+  { name: "Glacier lift", color: 0x568ac2, bottom: v(827, -835), top: v(242, -270) },
 ];
 
-export const PISTES: PisteDef[] = [
-  {
-    name: "Gipfelabfahrt",
-    color: 0x2f6fe0,
-    width: 40,
-    points: [v(40, -505), v(0, -420), v(-60, -300), v(-20, -180), v(60, -60), v(40, 60), v(-30, 180), v(10, 300), v(50, 420), v(62, 490)],
-  },
-  {
-    name: "Arven",
-    color: 0xd93434,
-    width: 34,
-    points: [v(-232, -240), v(-285, -150), v(-220, -40), v(-292, 80), v(-250, 180), v(-262, 248)],
-  },
-  {
-    name: "Sonnenhang",
-    color: 0xd93434,
-    width: 34,
-    points: [v(242, -118), v(180, -30), v(262, 80), v(205, 190), v(272, 320)],
-  },
-  { name: "Gratweg", color: 0x2f6fe0, width: 30, points: [v(10, -515), v(-110, -430), v(-200, -330), v(-232, -275)] },
-  { name: "Sonnenweg", color: 0x2f6fe0, width: 30, points: [v(70, -500), v(170, -330), v(225, -210), v(242, -150)] },
-  { name: "Talweg West", color: 0x2f6fe0, width: 32, points: [v(-262, 275), v(-200, 390), v(-70, 470), v(55, 505)] },
-  { name: "Talweg Ost", color: 0x2f6fe0, width: 32, points: [v(272, 350), v(210, 445), v(85, 505)] },
-  { name: "Schwarzer Hund", color: 0x222222, width: 26, points: [v(-60, -300), v(-140, -200), v(-160, -60), v(-110, 90), v(-30, 180)] },
+export interface JumpDef extends V2 {
+  name: string;
+  heading: number;
+  height: number;
+  length: number;
+  width: number;
+  kind: "tabletop" | "gap" | "hip" | "roller";
+}
+const jumpOn = (piste: number, point: number, name: string, kind: JumpDef["kind"], height: number): JumpDef => {
+  const p = PISTES[piste].points;
+  return { ...p[point], name, kind, height, length: kind === "roller" ? 28 : 24, width: 10,
+    heading: Math.atan2(p[point + 1].x - p[point - 1].x, p[point + 1].z - p[point - 1].z) };
+};
+export const KICKERS: JumpDef[] = [
+  jumpOn(0, 3, "Wind lip", "hip", 6),
+  jumpOn(1, 5, "Glacier gap", "gap", 7),
+  jumpOn(2, 3, "Sunrise table", "tabletop", 5),
+  jumpOn(2, 5, "Ridge roller", "roller", 4),
+  jumpOn(3, 3, "Lake overlook", "tabletop", 6),
+  jumpOn(4, 3, "Homeward hop", "roller", 3),
+  jumpOn(4, 5, "Last light", "tabletop", 5),
+  jumpOn(5, 3, "Powder pillow", "roller", 5),
+  jumpOn(6, 5, "Forest gap", "gap", 6),
+  jumpOn(7, 3, "Raven's leap", "gap", 8),
+  jumpOn(12, 2, "East-west transfer", "hip", 6),
+  jumpOn(18, 2, "Glade transfer", "hip", 5),
+  jumpOn(25, 2, "Pillow pop", "roller", 5),
+  jumpOn(26, 2, "Razor drop", "gap", 9),
+  { x: 565, z: 530, name: "Lakeside launch", heading: Math.PI / 10, height: 5.5, length: 28, width: 13, kind: "hip" },
 ];
 
-/** Jumps: placed on a piste control point, oriented along the piste. */
-export const KICKERS: { piste: number; point: number; height: number }[] = [
-  { piste: 0, point: 3, height: 1.8 },
-  { piste: 0, point: 5, height: 2.0 },
-  { piste: 0, point: 7, height: 1.6 },
-  { piste: 1, point: 2, height: 1.8 },
-  { piste: 2, point: 2, height: 2.0 },
-  { piste: 7, point: 2, height: 2.4 },
+export const LAKES = [
+  { name: "Mirror lake", x: 610, z: 610, radius: 102 },
+  { name: "Blue tarn", x: 890, z: 375, radius: 65 },
+  { name: "Glacier tarn", x: 530, z: -920, radius: 76 },
 ];
 
-export const LAKE = { x: -170, z: 600, radius: 72 };
-
-export const CHALETS: { x: number; z: number; rot: number; size: number }[] = [
-  { x: 160, z: 575, rot: 0.2, size: 1 },
-  { x: 200, z: 620, rot: -0.3, size: 1.2 },
-  { x: 250, z: 580, rot: 0.5, size: 0.9 },
-  { x: 300, z: 630, rot: 0.1, size: 1.1 },
-  { x: 140, z: 640, rot: -0.6, size: 0.9 },
-  { x: -60, z: 640, rot: 0.3, size: 1 },
-  { x: -300, z: 520, rot: 0.8, size: 1 },
-  { x: 330, z: 560, rot: -0.2, size: 1 },
-  { x: -10, z: 595, rot: -0.1, size: 1.15 },
+export const CHALETS = [
+  { x: 85, z: 1180, rot: 0.2, size: 1 }, { x: 120, z: 1230, rot: -0.3, size: 1.2 },
+  { x: -70, z: 1215, rot: 0.5, size: 0.9 }, { x: -110, z: 1160, rot: 0.1, size: 1.1 },
+  { x: 180, z: 1190, rot: -0.6, size: 0.9 }, { x: -1160, z: 70, rot: 1.5, size: 1 },
+  { x: 1110, z: -60, rot: -1.2, size: 1 }, { x: 870, z: 850, rot: -0.4, size: 1 },
+  { x: -870, z: 800, rot: 0.5, size: 1.1 }, { x: 70, z: -1170, rot: 3, size: 1 },
 ];
-
-export const CHURCH = { x: 245, z: 650, rot: -0.15 };
+export const CHURCH = { x: 210, z: 1250, rot: -0.15 };

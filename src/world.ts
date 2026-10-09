@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import { Terrain } from "./terrain";
-import { CHALETS, CHURCH, KICKERS, LAKE, LIFTS, PISTES } from "./layout";
+import { BOUNDS, CHALETS, CHURCH, KICKERS, LAKES, LIFTS, PISTES, landscapeAt, polar } from "./layout";
+import { Weather } from "./weather";
 import { Lift } from "./lifts";
 import { clay, clayVC } from "./materials";
 import { createNoise2D, fbm, mulberry32, smoothstep } from "./noise";
@@ -34,6 +35,8 @@ export class World {
   readonly lifts: Lift[];
   readonly sun: THREE.DirectionalLight;
   readonly summit: THREE.Vector3;
+  readonly weather: Weather;
+  private sky: THREE.Mesh<THREE.SphereGeometry, THREE.ShaderMaterial>;
   /** tree positions, for the minimap */
   readonly trees: { x: number; z: number }[] = [];
   private grid = new Map<number, Collider[]>();
@@ -47,7 +50,7 @@ export class World {
     scene.fog = new THREE.Fog(SKY_HORIZON.clone().lerp(new THREE.Color(0xffffff), 0.15), 350, 5200);
 
     // Sky dome
-    const sky = this.makeSky();
+    const sky = this.sky = this.makeSky();
     scene.add(sky);
 
     // Image based lighting from the sky for soft clay shading
@@ -84,21 +87,14 @@ export class World {
       for (const c of l.colliders) this.addCollider(c);
     }
 
-    // Summit cross on the highest point near the peak
-    let best = new THREE.Vector3(0, -Infinity, 0);
-    for (let x = -60; x <= 60; x += 2) {
-      for (let z = -680; z <= -560; z += 2) {
-        const y = this.terrain.heightAt(x, z);
-        if (y > best.y) best.set(x, y, z);
-      }
-    }
-    this.summit = best;
+    this.summit = new THREE.Vector3(0, this.terrain.heightAt(0, 0), 0);
     const cross = new THREE.Mesh(summitCrossGeometry(), clayVC());
-    cross.position.copy(best).y -= 0.3;
+    cross.position.set(-18, this.terrain.heightAt(-18, -5) - 0.3, -5);
     cross.rotation.y = 0.4;
     cross.castShadow = true;
     scene.add(cross);
-    this.addCollider({ x: best.x, z: best.z, r: 1.4, top: best.y + 5 });
+    this.addCollider({ x: -18, z: -5, r: 1.4, top: cross.position.y + 5 });
+    this.weather = new Weather(scene);
 
     this.placeVillage();
     this.placeLake();
@@ -107,6 +103,7 @@ export class World {
     this.placeMarkers();
     this.placeKickerFlags();
     this.placeClouds();
+    this.placeSigns();
   }
 
   /** Orange flags either side of each jump lip so you can spot them from above. */
@@ -121,16 +118,12 @@ export class World {
     b.add(new THREE.ExtrudeGeometry(flag, { depth: 0.04, bevelEnabled: false }), 0xff7a1a, { pos: [0.05, 2.4, 0] });
     const geo = b.build();
     for (const k of KICKERS) {
-      const pts = PISTES[k.piste].points;
-      const c = pts[k.point];
-      const a = pts[k.point - 1];
-      const d = pts[k.point + 1];
-      const len = Math.hypot(d.x - a.x, d.z - a.z);
-      const dx = (d.x - a.x) / len;
-      const dz = (d.z - a.z) / len;
+      const c = k;
+      const dx = Math.sin(k.heading);
+      const dz = Math.cos(k.heading);
       for (const side of [-1, 1]) {
-        const x = c.x - dz * 6.5 * side;
-        const z = c.z + dx * 6.5 * side;
+        const x = c.x - dz * (k.width + 3) * side;
+        const z = c.z + dx * (k.width + 3) * side;
         const m = new THREE.Mesh(geo, clayVC());
         m.position.set(x, this.terrain.heightAt(x, z) - 0.1, z);
         m.rotation.y = Math.atan2(dx, dz) + Math.PI / 2;
@@ -150,6 +143,8 @@ export class World {
         top: { value: SKY_TOP },
         horizon: { value: SKY_HORIZON },
         sunDir: { value: SUN_DIR },
+        storm: { value: 0 },
+        stormColor: { value: new THREE.Color(0xa8bdce) },
       },
       vertexShader: /* glsl */ `
         varying vec3 vDir;
@@ -158,7 +153,7 @@ export class World {
           gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
         }`,
       fragmentShader: /* glsl */ `
-        uniform vec3 top; uniform vec3 horizon; uniform vec3 sunDir;
+        uniform vec3 top; uniform vec3 horizon; uniform vec3 sunDir; uniform float storm; uniform vec3 stormColor;
         varying vec3 vDir;
         void main() {
           vec3 d = normalize(vDir);
@@ -167,6 +162,7 @@ export class World {
           col = mix(col, horizon * 1.04, smoothstep(0.0, -0.2, d.y));
           float s = max(dot(d, sunDir), 0.0);
           col += vec3(1.0, 0.92, 0.75) * (pow(s, 8.0) * 0.25 + pow(s, 900.0) * 3.0);
+          col = mix(col, stormColor, storm);
           gl_FragColor = vec4(col, 1.0);
           #include <tonemapping_fragment>
           #include <colorspace_fragment>
@@ -205,8 +201,14 @@ export class World {
     }
     for (const c of CHALETS) if (Math.hypot(x - c.x, z - c.z) < 11 + margin) return true;
     if (Math.hypot(x - CHURCH.x, z - CHURCH.z) < 16 + margin) return true;
-    if (Math.hypot(x - LAKE.x, z - LAKE.z) < LAKE.radius + 4 + margin) return true;
-    if (Math.hypot(x - this.summit.x, z - this.summit.z) < 12) return true;
+    for (const lake of LAKES) if (Math.hypot(x - lake.x, z - lake.z) < lake.radius + 10 + margin) return true;
+    for (const jump of KICKERS) {
+      const dx = x - jump.x, dz = z - jump.z;
+      const along = dx * Math.sin(jump.heading) + dz * Math.cos(jump.heading);
+      const across = dx * Math.cos(jump.heading) - dz * Math.sin(jump.heading);
+      if (along > -jump.length - 14 && along < 65 && Math.abs(across) < jump.width + 12 + margin) return true;
+    }
+    if (Math.hypot(x - this.summit.x, z - this.summit.z) < 95) return true;
     return false;
   }
 
@@ -215,16 +217,18 @@ export class World {
     const geos = [pineGeometry(true), pineGeometry(false)];
     const mats = clayVC();
     // bucket instances into tiles so camera + shadow frustum culling can skip most of the forest
-    const TILE = 120;
+    const TILE = 200;
     const tiles = new Map<string, THREE.Matrix4[]>();
     const q = new THREE.Quaternion();
     const n = new THREE.Vector3();
     const t = this.terrain;
-    for (let tries = 0; tries < 48000; tries++) {
-      const x = -495 + rand() * 990;
-      const z = -700 + rand() * 1415;
+    for (let tries = 0; tries < 68000; tries++) {
+      const x = BOUNDS.minX + rand() * (BOUNDS.maxX - BOUNDS.minX);
+      const z = BOUNDS.minZ + rand() * (BOUNDS.maxZ - BOUNDS.minZ);
       const y = t.heightAt(x, z);
-      const treeline = 230 + forestNoise(x * 0.01, z * 0.01) * 35;
+      const region = landscapeAt(x, z);
+      if (region === "rock" || region === "storm") continue;
+      const treeline = 460 + forestNoise(x * 0.01, z * 0.01) * 35;
       if (y > treeline) continue;
       const density = fbm(forestNoise, x * 0.006, z * 0.006, 3) * 0.8 + 0.25 + (1 - smoothstep(treeline - 60, treeline, y)) * 0.25;
       if (rand() > density) continue;
@@ -242,7 +246,7 @@ export class World {
       if (!list) tiles.set(key, (list = []));
       list.push(m);
       this.trees.push({ x, z });
-      if (Math.abs(x) < 470 && z > -700 && z < 700) this.addCollider({ x, z, r: 0.9 * s, top: y + 6 * s });
+      this.addCollider({ x, z, r: 0.9 * s, top: y + 6 * s });
     }
     for (const [key, list] of tiles) {
       const im = new THREE.InstancedMesh(geos[Number(key[0])], mats, list.length);
@@ -260,16 +264,17 @@ export class World {
     const lists: THREE.Matrix4[][] = [[], [], []];
     const t = this.terrain;
     const n = new THREE.Vector3();
-    for (let tries = 0; tries < 9000; tries++) {
-      const x = -480 + rand() * 960;
-      const z = -690 + rand() * 1300;
+    for (let tries = 0; tries < 14000; tries++) {
+      const x = BOUNDS.minX + rand() * (BOUNDS.maxX - BOUNDS.minX);
+      const z = BOUNDS.minZ + rand() * (BOUNDS.maxZ - BOUNDS.minZ);
       const y = t.heightAt(x, z);
-      if (y < 150 && rand() > 0.15) continue;
+      const rocky = landscapeAt(x, z) === "rock";
+      if (!rocky && rand() > 0.2) continue;
       if (t.pisteDistanceAt(x, z) < 24) continue;
       if (this.blocked(x, z, 2)) continue;
       t.normalAt(x, z, n);
-      if (rand() > 0.12 + (1 - n.y) * 1.5) continue;
-      const s = 0.6 + Math.pow(rand(), 2) * 2.6;
+      if (rand() > (rocky ? 0.5 : 0.1) + (1 - n.y) * 1.5) continue;
+      const s = rocky ? 1.8 + Math.pow(rand(), 2) * 9 : 0.8 + rand() * 2.5;
       const q = new THREE.Quaternion().setFromEuler(new THREE.Euler(rand() * 0.3, rand() * 6.28, rand() * 0.3));
       const k = Math.floor(rand() * 3);
       lists[k].push(new THREE.Matrix4().compose(new THREE.Vector3(x, y - 0.25 * s, z), q, new THREE.Vector3(s, s, s)));
@@ -354,14 +359,15 @@ export class World {
   }
 
   private placeLake() {
+    LAKES.forEach((lake, index) => {
     const ice = new THREE.Mesh(
-      new THREE.CircleGeometry(LAKE.radius + 1, 64),
+      new THREE.CircleGeometry(lake.radius - 0.5, 96),
       new THREE.MeshStandardMaterial({
-        color: 0xc8ecff,
+        color: 0x8ed8e9,
         roughness: 0.12,
         metalness: 0.0,
         transparent: true,
-        opacity: 0.78,
+        opacity: 0.72,
         envMapIntensity: 1.4,
         polygonOffset: true,
         polygonOffsetFactor: -2,
@@ -369,9 +375,51 @@ export class World {
       }),
     );
     ice.rotation.x = -Math.PI / 2;
-    ice.position.set(LAKE.x, this.terrain.lakeY + 0.02, LAKE.z);
+    ice.position.set(lake.x, this.terrain.lakeHeights[index] + 0.05, lake.z);
     ice.receiveShadow = true;
     this.scene.add(ice);
+    // Fixed hairline fractures make the frozen surface legible from a distance.
+    const random = mulberry32(940 + index);
+    const points: THREE.Vector3[] = [];
+    for (let i = 0; i < 18; i++) {
+      const a = random() * Math.PI * 2;
+      const r = random() * lake.radius * 0.65;
+      const x = Math.cos(a) * r, z = Math.sin(a) * r;
+      const length = 8 + random() * 22;
+      points.push(new THREE.Vector3(x, 0, z), new THREE.Vector3(x + Math.cos(a + 0.7) * length, 0, z + Math.sin(a + 0.7) * length));
+    }
+    const cracks = new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(points), new THREE.LineBasicMaterial({ color: 0xe3fbff, transparent: true, opacity: 0.65 }));
+    cracks.position.set(lake.x, this.terrain.lakeHeights[index] + 0.09, lake.z);
+    this.scene.add(cracks);
+    });
+  }
+
+  private placeSigns() {
+    for (let i = 0; i < 8; i++) {
+      for (const radius of [115, 300, 560]) {
+        const point = polar(radius, i * 45 + 5);
+        const canvas = document.createElement("canvas");
+        canvas.width = 512; canvas.height = 160;
+        const ctx = canvas.getContext("2d")!;
+        ctx.fillStyle = radius === 115 ? "#283c51" : "#287776";
+        ctx.fillRect(0, 0, 512, 160);
+        ctx.strokeStyle = "#e8f2f0"; ctx.lineWidth = 6; ctx.strokeRect(8, 8, 496, 144);
+        ctx.fillStyle = "white"; ctx.textAlign = "center";
+        ctx.font = "600 34px sans-serif";
+        ctx.fillText(PISTES[i].name, 256, 63);
+        ctx.font = "24px sans-serif";
+        ctx.fillText(radius === 115 ? "↓  valley route" : "↙  traverse    ·    valley  ↓", 256, 114);
+        const y = this.terrain.heightAt(point.x, point.z);
+        const board = new THREE.Mesh(new THREE.PlaneGeometry(7, 2.2), new THREE.MeshStandardMaterial({ map: new THREE.CanvasTexture(canvas), side: THREE.DoubleSide, roughness: 0.85 }));
+        board.position.set(point.x, y + 3.8, point.z);
+        board.rotation.y = Math.atan2(-point.x, -point.z);
+        const post = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.17, 4.4, 6), clay(0x8e6b51));
+        post.position.set(point.x, y + 2.2, point.z);
+        post.castShadow = true;
+        this.scene.add(board, post);
+        this.addCollider({ x: point.x, z: point.z, r: 0.3, top: y + 4.5 });
+      }
+    }
   }
 
   private placeClouds() {
@@ -389,8 +437,8 @@ export class World {
         g.add(m);
       }
       const a = rand() * Math.PI * 2;
-      const d = 900 + rand() * 2600;
-      g.position.set(Math.cos(a) * d, 520 + rand() * 450, Math.sin(a) * d);
+      const d = 1700 + rand() * 2600;
+      g.position.set(Math.cos(a) * d, 760 + rand() * 450, Math.sin(a) * d);
       g.rotation.y = rand() * Math.PI;
       g.userData.speed = 2 + rand() * 4;
       this.clouds.push(g);
@@ -399,6 +447,8 @@ export class World {
   }
 
   update(dt: number, time: number, focus: THREE.Vector3, particles: Particles) {
+    this.weather.update(dt, time, focus, this.scene, this.sun);
+    this.sky.material.uniforms.storm.value = this.weather.intensity;
     for (const l of this.lifts) l.update(dt, time);
     for (const c of this.clouds) {
       c.position.x += c.userData.speed * dt;

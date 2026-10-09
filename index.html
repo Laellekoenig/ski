@@ -16,15 +16,32 @@
         <div class="sub">best <span id="best">0</span> m</div>
       </div>
       <div class="card speedo"><span id="speed">0</span><small>km/h</small></div>
-      <div class="card map"><canvas id="minimap"></canvas></div>
+      <div class="card location"><div id="region-name">Vierwind summit</div><div id="conditions"></div><span id="altitude">640 m</span></div>
+      <button class="card map" id="open-map" aria-label="Open trail map" aria-expanded="false">
+        <span class="map-heading">VIERWIND <span>N ↑</span></span>
+        <canvas id="minimap" aria-label="Mountain minimap"></canvas>
+        <span class="map-footer">Trail map <kbd>Tab</kbd></span>
+      </button>
       <div id="prompt"></div>
       <div id="toasts"></div>
     </div>
 
+    <section id="map-panel" role="dialog" aria-modal="true" aria-labelledby="map-title" hidden>
+      <div class="map-sheet">
+        <header><div><span class="eyebrow">ONE MOUNTAIN. YOUR OWN WAY DOWN.</span><h2 id="map-title">Vierwind trail map</h2></div><button id="close-map" aria-label="Close trail map">✕</button></header>
+        <div class="map-body"><canvas id="trail-map" aria-label="Eight descents from the central summit, connected by sixteen traverses; frozen lakes and jumps marked"></canvas>
+          <aside><p class="map-intro">Start at the center.<br>Follow your curiosity.</p><p>8 faces · 28 trails<br>3 lakes · 15 jumps</p>
+            <div class="map-legend"><span><i class="blue"></i>Easy descent</span><span><i class="red"></i>Steeper descent</span><span><i class="black"></i>Expert chute</span><span><i class="teal"></i>Connecting traverse</span><span><i class="lift"></i>Return lift</span><span><i class="jump"></i>Jump / transfer</span></div>
+            <p class="map-note">The same mountain, every run.<br>Learn a line. Find another.</p><p class="map-note">2.64 × 2.64 km<br>640 m summit</p>
+          </aside></div>
+        <footer><span>Paused · plan your next line</span><span><kbd>Tab</kbd> / <kbd>Esc</kbd> back to the snow</span></footer>
+      </div>
+    </section>
+
     <div id="title">
       <div class="title-card">
         <h1>A Short Ski</h1>
-        <p class="tag">one mountain · three lifts · how far can you go?</p>
+        <p class="tag">one lasting mountain · eight ways down · endless detours</p>
         <ul class="keys">
           <li><kbd>A</kbd><kbd>D</kbd> steer</li>
           <li><kbd>W</kbd> tuck / skate</li>
@@ -32,6 +49,7 @@
           <li><kbd>Space</kbd> jump (steer to spin)</li>
           <li><kbd>E</kbd> ride lift</li>
           <li><kbd>R</kbd> back to summit</li>
+          <li><kbd>Tab</kbd> trail map</li>
           <li><kbd>M</kbd> mute</li>
           <li><kbd>Esc</kbd> pause</li>
         </ul>
@@ -48,7 +66,7 @@
       </div>
     </div>
 
-    <div id="loading">sculpting the mountain…</div>
+    <div id="loading">opening Vierwind mountain…</div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>
