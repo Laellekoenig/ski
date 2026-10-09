@@ -46,14 +46,6 @@ body.playing {
   pointer-events: none;
 }
 
-.sr-only {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
-  clip-path: inset(50%);
-  white-space: nowrap;
-}
 
 button {
   font: inherit;
@@ -134,64 +126,48 @@ kbd {
   pointer-events: none;
   transition: opacity 0.5s;
 }
-#title button {
-  pointer-events: auto;
-}
-#lineup-labels {
-  position: absolute;
-  inset: 0;
-}
+#title button { pointer-events: auto; }
+#lineup-labels { position: absolute; inset: 0; }
 .lineup-label {
   position: absolute;
-  left: 0;
-  top: 0;
+  left: 0; top: 0;
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 6px 10px;
-  border: 0;
-  background: rgba(255, 255, 255, 0.9);
-  font-size: 13px;
-  font-weight: 500;
+  gap: 10px;
+  padding: 7px 12px 7px 7px;
+  border: 1px solid #d9e1df66;
+  border-left: 3px solid var(--character-color);
+  border-radius: 2px;
+  background: rgba(20,30,38,0.82);
+  color: #eef1ed;
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 15px;
+  font-weight: 700;
+  text-align: left;
   white-space: nowrap;
   transform: translate(-50%, -100%);
-  transition: background 0.15s, color 0.15s;
+  transition: background 0.2s, border-color 0.2s, transform 0.2s;
 }
-.lineup-label .key {
-  color: var(--muted);
-  font-size: 11px;
-}
-.lineup-label:hover {
-  background: #fff;
-}
-.lineup-label[aria-pressed="true"] {
-  background: var(--ink);
-  color: var(--paper);
-}
-.lineup-label[aria-pressed="true"] .key {
-  color: rgba(255, 255, 255, 0.55);
-}
+.lineup-label:hover { background: #25333d; border-color: #e8edea; }
+.lineup-label[aria-pressed="true"] { background: var(--character-color); border-color: #edf0e9; transform: translate(-50%, -100%) translateY(-4px); }
+.lineup-label[aria-pressed="true"] kbd { background: #edf0e9; border-color: #edf0e9; color: #223039; }
 
-.title-panel {
-  position: absolute;
-  left: 50%;
-  bottom: 48px;
-  transform: translateX(-50%);
+.lineup-label kbd {
+  display: inline-block;
+  min-width: 1.6em;
+  padding: 3px 6px;
+  border: 1px solid rgba(255,255,255,0.3);
+  border-radius: 2px;
+  background: rgba(15,24,32,0.6);
+  color: #e8eeee;
+  font: 11px Consolas, monospace;
+  text-align: center;
+  opacity: 1;
 }
-#start-button {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  padding: 14px 18px 14px 22px;
-  border: 0;
-  background: var(--ink);
-  color: var(--paper);
-  font-size: 15px;
-  font-weight: 500;
-  transition: background 0.15s;
-}
-#start-button:hover {
-  background: #333;
+.lineup-label[aria-pressed="true"] kbd {
+  background: #edf0e9;
+  border-color: #edf0e9;
+  color: #223039;
 }
 
 /* ---- pause */

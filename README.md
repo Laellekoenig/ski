@@ -10,9 +10,11 @@ bun run dev     # http://localhost:5173/?silent
 bun run build   # static build in dist/
 ```
 
+The riders use a restrained, early-2000s console style: human proportions, low-poly technical clothing, mirrored goggles, helmets, balaclavas and no exposed skin. Beni and Fynn are male; Mila and Lumi are female. Each has a distinct silhouette, outfit palette and equipment setup.
+
 ## Controls
 
-Choose one of five friends with **1–5**, left/right arrows, or their name tags. Press **Enter** or **Let’s ski** to start. Gamepads can choose with the D-pad or shoulder buttons and start with A or Start.
+Choose one of four human riders with **1–4**, left/right arrows, or their name tags. Press **Enter** to start. Gamepads can choose with the D-pad or shoulder buttons and start with A or Start.
 
 | Key | Action |
 | --- | --- |
@@ -66,7 +68,7 @@ The importer caches downloads in the system temporary directory, decodes the sou
 - `src/world.ts`: winter sky with thin drifting clouds, atmospheric haze, and lighting
 - `src/weather.ts`: sparse, subtle diamond dust (the snow reflections live in `src/materials.ts`)
 - `src/player.ts`: carving, braking, jumps, landings, and run completion
-- `src/skier.ts`, `src/characters.ts`, `src/animals.ts`: the five clay skiers
+- `src/skier.ts`, `src/characters.ts`, `src/gear.ts`, `src/equipment.ts`: four fully equipped human skiers, articulated clothing, shaped skis and bindings
 - `src/lineup.ts`: character selection and the transition onto skis
 
 ## Verification

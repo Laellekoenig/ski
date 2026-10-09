@@ -35,7 +35,6 @@ interface Slot {
 }
 
 export interface LineupEvents {
-  onSelect: (character: Character) => void;
   onHop: () => void;
   /** the chosen friend is on its skis at `at`, facing `heading` */
   onLand: (skier: Skier, at: THREE.Vector3, heading: number) => void;
@@ -79,7 +78,8 @@ export class Lineup {
 
       const skis = new THREE.Group();
       for (const side of [-1, 1]) {
-        const ski = makeSki(character.skis);
+        const ski = makeSki(character.skis, character.accent, character.outfit);
+        ski.scale.setScalar(character.height);
         ski.position.x = side * SKI_GAP;
         skis.add(ski);
       }
@@ -91,15 +91,16 @@ export class Lineup {
       skier.skis = false;
       skier.root.rotation.y = this.heading;
       world.scene.add(skier.root);
-      // Desynchronise idle bobbing and blinking a little.
+      // Desynchronise idle movements a little.
       for (let frame = 0; frame < 30 + index * 17; frame++) skier.update(1 / 60, this.pose(index, 0, 0));
 
       const label = document.createElement("button");
       label.type = "button";
       label.className = "lineup-label";
-      label.setAttribute("aria-label", `${index + 1}. ${character.name}, ${character.species}`);
+      label.style.setProperty("--character-color", character.color);
+      label.setAttribute("aria-label", `${index + 1}. ${character.name}`);
       label.setAttribute("aria-keyshortcuts", String(index + 1));
-      label.innerHTML = `<span class="key">${index + 1}</span><span>${character.name}</span>`;
+      label.innerHTML = `<kbd>${index + 1}</kbd><span>${character.name}</span>`;
       label.addEventListener("click", () => this.select(index));
       this.labels.appendChild(label);
 
@@ -120,7 +121,6 @@ export class Lineup {
     this.selected = index;
     this.slots[index].wave = 1.4;
     this.slots.forEach((slot, i) => slot.label.setAttribute("aria-pressed", String(i === index)));
-    this.events.onSelect(this.slots[index].character);
   }
 
   step(direction: number) {
@@ -246,7 +246,7 @@ export class Lineup {
     if (this.launching) return;
     for (const slot of this.slots) {
       const p = this.tmp.copy(slot.skier.root.position);
-      p.y += 2.25;
+      p.y += 2;
       p.project(camera);
       const visible = p.z < 1;
       slot.label.style.visibility = visible ? "" : "hidden";

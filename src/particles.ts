@@ -1,5 +1,4 @@
 import * as THREE from "three";
-import { clay } from "./materials";
 
 export interface EmitOpts {
   life?: number;
@@ -13,7 +12,7 @@ export interface EmitOpts {
 
 const MAX = 900;
 
-/** Pool of little clay puffs: snow spray, chimney smoke, crash poofs. */
+/** Soft powder sprites for ski spray, landings and crashes. */
 export class Particles {
   readonly mesh: THREE.InstancedMesh;
   private pos = new Float32Array(MAX * 3);
@@ -29,7 +28,28 @@ export class Particles {
   private c = new THREE.Color();
 
   constructor() {
-    this.mesh = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(1, 1), clay(0xffffff, { roughness: 0.9, bump: 0.3 }), MAX);
+    const canvas = document.createElement("canvas");
+    canvas.width = canvas.height = 32;
+    const ctx = canvas.getContext("2d")!;
+    const gradient = ctx.createRadialGradient(16, 16, 0, 16, 16, 16);
+    gradient.addColorStop(0, "rgba(255,255,255,0.65)");
+    gradient.addColorStop(0.35, "rgba(255,255,255,0.4)");
+    gradient.addColorStop(1, "rgba(255,255,255,0)");
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, 32, 32);
+    const map = new THREE.CanvasTexture(canvas);
+    map.colorSpace = THREE.SRGBColorSpace;
+    const material = new THREE.MeshBasicMaterial({ map, transparent: true, depthWrite: false, opacity: 0.85 });
+    // Orient each instanced quad toward the camera without updating 900 quaternions.
+    material.onBeforeCompile = (shader) => {
+      shader.vertexShader = shader.vertexShader.replace("#include <project_vertex>", `
+        vec4 mvPosition = modelViewMatrix * instanceMatrix * vec4(0.0, 0.0, 0.0, 1.0);
+        float particleScale = length(instanceMatrix[0].xyz);
+        mvPosition.xy += position.xy * particleScale;
+        gl_Position = projectionMatrix * mvPosition;
+      `);
+    };
+    this.mesh = new THREE.InstancedMesh(new THREE.PlaneGeometry(2, 2), material, MAX);
     this.mesh.frustumCulled = false;
     this.mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     for (let i = 0; i < MAX; i++) {
