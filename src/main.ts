@@ -8,6 +8,7 @@ import { Input } from "./input";
 import { Hud } from "./hud";
 import { Audio } from "./audio";
 import { damp, lerp } from "./noise";
+import { CharacterSelect } from "./character-select";
 
 const BEST_KEY = "a-short-ski.best";
 
@@ -140,12 +141,19 @@ function start() {
   started = true;
   hud.showTitle(false);
   audio.start();
+  // Let the title fade before releasing the preview models and WebGL context.
+  setTimeout(() => characterSelect.dispose(), 550);
 }
 
 window.addEventListener("resize", () => {
   camera.aspect = window.innerWidth / window.innerHeight;
   renderer.setSize(window.innerWidth, window.innerHeight);
 });
+
+const characterSelect = new CharacterSelect((character) => {
+  player.selectCharacter(character);
+  hud.setCharacter(character);
+}, start);
 
 document.getElementById("loading")!.style.opacity = "0";
 setTimeout(() => document.getElementById("loading")?.remove(), 700);
@@ -165,7 +173,13 @@ function frame(now: number) {
 
   input.update();
   const st = input.state;
-  if (!started && st.anyPressed) start();
+  if (!started) {
+    if (st.characterPressed >= 0) characterSelect.select(st.characterPressed);
+    if (st.characterStep) characterSelect.step(st.characterStep);
+    if (st.startPressed) start();
+    // Confirming the choice must not also jump or board a lift.
+    st.jumpPressed = st.actionPressed = false;
+  }
   if (st.mutePressed) audio.toggleMute();
 
   if (started) {
@@ -200,15 +214,16 @@ function frame(now: number) {
   hud.update(player.runDistance, best, player.speed, started ? prompt : "", player.pos.x, player.pos.z, player.heading);
   audio.update(player.speed, player.skid, player.grounded, player.state === "lift");
 
+  player.skier.root.visible = started;
   renderer.render(world.scene, camera);
+  if (!started) characterSelect.update(dt);
 }
 requestAnimationFrame(frame);
 
 if (import.meta.env.DEV) {
   // test helper: run the simulation headlessly for `seconds` with fixed inputs, then render one frame
   const sim = (seconds: number, keys: Partial<typeof input.state> = {}, sample?: () => void) => {
-    started = true;
-    hud.showTitle(false);
+    start();
     const n = Math.round(seconds / STEP);
     for (let i = 0; i < n; i++) {
       player.update(STEP, { ...input.state, ...keys, jumpPressed: i === 0 && !!keys.jumpPressed, actionPressed: i === 0 && !!keys.actionPressed });

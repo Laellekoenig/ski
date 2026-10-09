@@ -8,6 +8,7 @@ import type { Particles } from "./particles";
 import type { Trails } from "./trails";
 import { BOUNDS } from "./layout";
 import { damp, lerp } from "./noise";
+import type { Character } from "./characters";
 
 const G = 9.81;
 const MU = { piste: 0.04, snow: 0.08, ice: 0.006 };
@@ -29,7 +30,7 @@ export interface PlayerEvents {
 const UP = new THREE.Vector3(0, 1, 0);
 
 export class Player {
-  readonly skier = new Skier();
+  skier = new Skier();
   readonly pos = new THREE.Vector3();
   readonly vel = new THREE.Vector3();
   heading = 0;
@@ -91,6 +92,17 @@ export class Player {
 
   get speed() {
     return this.vel.length();
+  }
+
+  selectCharacter(character: Character) {
+    if (this.skier.character.id === character.id) return;
+    const previous = this.skier;
+    this.skier = new Skier(character);
+    this.skier.root.position.copy(previous.root.position);
+    this.skier.root.quaternion.copy(previous.root.quaternion);
+    this.world.scene.remove(previous.root);
+    previous.dispose();
+    this.world.scene.add(this.skier.root);
   }
 
   /** Place the skier at a lift's top exit, facing downhill. */

@@ -12,6 +12,10 @@ bun run build   # static build in dist/
 
 ## Controls
 
+Pick your skier on the start screen with **1–5** (number row or numpad), the left/right arrows, or a click. Press **Enter**, **Space**, or the **Let’s ski** button to start. Gamepads can choose with the D-pad or shoulder buttons and start with A or Start.
+
+Meet Beni the Alpine ibex, Mila the Alpine marmot, Lumi the mountain hare, Fynn the red fox, and Nico the chamois. Each has a handmade clay model and colourful ski outfit; all share the same ski physics. Your chosen friend stays with you through jumps, crashes, chairlift rides, and summit resets.
+
 | Key | Action |
 | --- | --- |
 | `A` / `D` (or arrows) | steer (in the air: spin) |
@@ -32,5 +36,7 @@ Gamepads work too: left stick steers, A jumps, X/B boards the lift, and the trig
 - `src/terrain.ts`: heightmap mountain, high-res playable grid plus a coarse far landscape
 - `src/player.ts`: ski physics (carving, friction, airtime, crashes, lifts)
 - `src/skier.ts`: the clay skier model and its procedural animation
+- `src/characters.ts`, `src/animals.ts`: the five mountain friends, outfits, and sculpted animal features
+- `src/character-select.ts`: live 3D character selection on the start screen
 - `src/world.ts`: sky, lighting, forest, rocks, village, clouds, collisions
 - `src/materials.ts`: procedural "thumb-pressed clay" normal maps and rim-lit clay material

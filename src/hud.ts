@@ -1,6 +1,7 @@
 import type { World } from "./world";
 import { BOUNDS, PISTES } from "./layout";
 import { LAKE } from "./layout";
+import type { Character } from "./characters";
 
 const MAP_W = 150;
 const MAP_H = Math.round((MAP_W * (BOUNDS.maxZ - BOUNDS.minZ)) / (BOUNDS.maxX - BOUNDS.minX));
@@ -20,6 +21,7 @@ export class Hud {
   private mapBg: HTMLCanvasElement;
   private lastDist = -1;
   private lastPrompt = "";
+  private characterColor = "#168c87";
 
   constructor(world: World) {
     this.map = document.getElementById("minimap") as HTMLCanvasElement;
@@ -121,7 +123,15 @@ export class Hud {
 
   showTitle(show: boolean) {
     this.titleEl.classList.toggle("hidden", !show);
+    this.titleEl.inert = !show;
     this.hudEl.classList.toggle("hidden", show);
+  }
+
+  setCharacter(character: Character) {
+    document.getElementById("current-character")!.textContent = character.name;
+    document.getElementById("current-species")!.textContent = character.species;
+    this.hudEl.style.setProperty("--skier-color", character.color);
+    this.characterColor = character.color;
   }
 
   update(dist: number, best: number, speed: number, prompt: string, px: number, pz: number, heading: number) {
@@ -146,7 +156,7 @@ export class Hud {
     ctx.translate(x, y);
     // heading 0 faces +z, which is "down" on the map
     ctx.rotate(-heading);
-    ctx.fillStyle = "#e8423f";
+    ctx.fillStyle = this.characterColor;
     ctx.strokeStyle = "#fff";
     ctx.lineWidth = 1.5;
     ctx.beginPath();

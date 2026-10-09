@@ -10,7 +10,10 @@ export interface InputState {
   actionPressed: boolean;
   resetPressed: boolean;
   mutePressed: boolean;
-  anyPressed: boolean;
+  startPressed: boolean;
+  /** Zero-based roster slot; -1 when no number key was pressed. */
+  characterPressed: number;
+  characterStep: number;
 }
 
 const LEFT = ["KeyA", "ArrowLeft"];
@@ -31,7 +34,9 @@ export class Input {
     actionPressed: false,
     resetPressed: false,
     mutePressed: false,
-    anyPressed: false,
+    startPressed: false,
+    characterPressed: -1,
+    characterStep: 0,
   };
 
   constructor() {
@@ -41,8 +46,10 @@ export class Input {
       this.down.add(e.code);
     });
     window.addEventListener("keyup", (e) => this.down.delete(e.code));
-    window.addEventListener("blur", () => this.down.clear());
-    window.addEventListener("pointerdown", () => this.pressed.add("Pointer"));
+    window.addEventListener("blur", () => {
+      this.down.clear();
+      this.pressed.clear();
+    });
   }
 
   private any(codes: string[]) {
@@ -59,7 +66,13 @@ export class Input {
     let actionPressed = this.pressed.has("KeyE") || this.pressed.has("Enter");
     let resetPressed = this.pressed.has("KeyR");
     const mutePressed = this.pressed.has("KeyM");
-    let anyPressed = this.pressed.size > 0;
+    let startPressed = this.pressed.has("Enter") || this.pressed.has("NumpadEnter") || this.pressed.has("Space");
+    let characterPressed = -1;
+    for (const code of this.pressed) {
+      const match = /^(?:Digit|Numpad)([1-5])$/.exec(code);
+      if (match) characterPressed = Number(match[1]) - 1;
+    }
+    let characterStep = (this.pressed.has("ArrowRight") ? 1 : 0) - (this.pressed.has("ArrowLeft") ? 1 : 0);
 
     const pad = navigator.getGamepads?.().find((p) => p && p.connected);
     if (pad) {
@@ -73,9 +86,10 @@ export class Input {
       jumpPressed ||= edge(0);
       actionPressed ||= edge(2) || edge(1);
       resetPressed ||= edge(3);
-      anyPressed ||= pad.buttons.some((_, i) => edge(i));
+      startPressed ||= edge(0) || edge(9);
+      characterStep += (edge(15) || edge(5) ? 1 : 0) - (edge(14) || edge(4) ? 1 : 0);
       this.padPrev = pad.buttons.map((x) => x.pressed);
-    }
+    } else this.padPrev = [];
 
     s.steer = Math.max(-1, Math.min(1, steer));
     s.tuck = tuck;
@@ -85,7 +99,9 @@ export class Input {
     s.actionPressed = actionPressed;
     s.resetPressed = resetPressed;
     s.mutePressed = mutePressed;
-    s.anyPressed = anyPressed;
+    s.startPressed = startPressed;
+    s.characterPressed = characterPressed;
+    s.characterStep = characterStep;
     this.pressed.clear();
   }
 }
