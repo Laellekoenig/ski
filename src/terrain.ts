@@ -47,11 +47,38 @@ export function baseHeight(x: number, z: number): number {
       + (-2 * u ** 3 + 3 * u ** 2) * 340;
   }
   slope += hillRelief(x, z);
+  return lerp(slope, geographicHeight(x, z), 1 - practiceField(x, z));
+}
+
+/** 1 on the shaped practice snowfield, fading to 0 where the surveyed terrain takes over. */
+function practiceField(x: number, z: number): number {
   const side = smoothstep(760, 1600, Math.abs(x));
   const uphill = 1 - smoothstep(-360, -60, z);
   const downhillBlend = smoothstep(1380, 2080, z);
-  const surveyed = Math.max(side, uphill, downhillBlend);
-  return lerp(slope, geographicHeight(x, z), surveyed);
+  return 1 - Math.max(side, uphill, downhillBlend);
+}
+
+/** Plain white snow hides its rolls, so the practice field is shaded as if they were this much deeper. */
+const RELIEF_SHADING = 3.5;
+/** Rolls are measured against the terrain averaged over this many cells either way. */
+const RELIEF_RADIUS = 10;
+
+/** Separable box blur of a height grid, clamped at the edges. */
+function blurHeights(h: Float32Array, r: number): Float32Array {
+  const tmp = new Float32Array(h.length);
+  const out = new Float32Array(h.length);
+  const n = 2 * r + 1;
+  for (let j = 0; j < NZ; j++) for (let i = 0; i < NX; i++) {
+    let sum = 0;
+    for (let o = -r; o <= r; o++) sum += h[j * NX + clamp(i + o, 0, NX - 1)];
+    tmp[j * NX + i] = sum / n;
+  }
+  for (let j = 0; j < NZ; j++) for (let i = 0; i < NX; i++) {
+    let sum = 0;
+    for (let o = -r; o <= r; o++) sum += tmp[clamp(j + o, 0, NZ - 1) * NX + i];
+    out[j * NX + i] = sum / n;
+  }
+  return out;
 }
 
 export type Surface = "snow";
@@ -109,6 +136,7 @@ export class Terrain {
     const col = new Float32Array(count * 3);
     const uv = new Float32Array(count * 2);
     const h = this.heights;
+    const broad = blurHeights(h, RELIEF_RADIUS);
     const n = new THREE.Vector3();
 
     const snowA = new THREE.Color(0xf4f7ff);
@@ -130,11 +158,15 @@ export class Terrain {
         const ir = Math.min(NX - 1, i + 1);
         const jd = Math.max(0, j - 1);
         const ju = Math.min(NZ - 1, j + 1);
-        n.set(
-          -(h[j * NX + ir] - h[j * NX + il]) / ((ir - il) * CELL),
-          1,
-          -(h[ju * NX + i] - h[jd * NX + i]) / ((ju - jd) * CELL),
-        ).normalize();
+        const dx = (ir - il) * CELL;
+        const dz = (ju - jd) * CELL;
+        const gx = (h[j * NX + ir] - h[j * NX + il]) / dx;
+        const gz = (h[ju * NX + i] - h[jd * NX + i]) / dz;
+        const bx = (broad[j * NX + ir] - broad[j * NX + il]) / dx;
+        const bz = (broad[ju * NX + i] - broad[jd * NX + i]) / dz;
+        // exaggerate how far each roll tilts away from the underlying grade
+        const relief = lerp(1, RELIEF_SHADING, practiceField(x, z));
+        n.set(-(bx + (gx - bx) * relief), 1, -(bz + (gz - bz) * relief)).normalize();
         nor[k * 3] = n.x;
         nor[k * 3 + 1] = n.y;
         nor[k * 3 + 2] = n.z;
@@ -189,7 +221,7 @@ export class Terrain {
       roughness: 0.92,
       metalness: 0,
       normalMap: snowNormalMap(),
-      normalScale: new THREE.Vector2(0.45, 0.45),
+      normalScale: new THREE.Vector2(0.35, 0.35),
     }));
     const mesh = new THREE.Mesh(geo, mat);
     mesh.receiveShadow = true;
