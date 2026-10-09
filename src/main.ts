@@ -116,8 +116,8 @@ const introLook = new THREE.Vector3();
 
 function snapCamera() {
   camYaw = player.heading;
-  camPos.copy(player.pos).add(new THREE.Vector3(-Math.sin(camYaw) * 8, 3.5, -Math.cos(camYaw) * 8));
-  camLook.copy(player.pos).add(new THREE.Vector3(0, 1.2, 0));
+  camPos.copy(player.pos).add(new THREE.Vector3(-Math.sin(camYaw) * 3.4, 1.75, -Math.cos(camYaw) * 3.4));
+  camLook.copy(player.pos).add(new THREE.Vector3(Math.sin(camYaw) * 6, 0.9, Math.cos(camYaw) * 6));
 }
 snapCamera();
 
@@ -200,8 +200,8 @@ function updateCamera(dt: number) {
     dy = Math.atan2(Math.sin(dy), Math.cos(dy));
     camYaw += dy * damp(player.state === "crash" ? 0.5 : 3.2, dt);
     const summitView = Math.max(0, 1 - Math.hypot(p.x, p.z) / 100);
-    const dist = 5.2 + Math.min(speed, 30) * 0.07 + summitView * 1.5;
-    const height = 2.3 + Math.min(speed, 30) * 0.025 + summitView * 1.5;
+    const dist = 3.4 + Math.min(speed, 30) * 0.04 + summitView * 1;
+    const height = 1.75 + Math.min(speed, 30) * 0.012 + summitView * 1;
     const want = tmpV.set(p.x - Math.sin(camYaw) * dist, p.y + height, p.z - Math.cos(camYaw) * dist);
     // the slope ahead is lower: keep the camera above the ground behind us
     const ground = world.terrain.heightAt(want.x, want.z) + 1.6;
@@ -209,7 +209,8 @@ function updateCamera(dt: number) {
     camPos.lerp(want, damp(8, dt));
     const camGround = world.terrain.heightAt(camPos.x, camPos.z) + 1.2;
     if (camPos.y < camGround) camPos.y = camGround;
-    const look = tmpV.set(p.x + Math.sin(camYaw) * 3, p.y + 0.9, p.z + Math.cos(camYaw) * 3);
+    // aim well ahead so the skier sits low in the frame with the slope opening up above
+    const look = tmpV.set(p.x + Math.sin(camYaw) * 6, p.y + 0.9, p.z + Math.cos(camYaw) * 6);
     camLook.lerp(look, damp(14, dt));
     // Keep the skier visible when the camera is still behind a takeoff lip.
     for (let u = 0.15; u < 0.9; u += 0.15) {
@@ -218,7 +219,7 @@ function updateCamera(dt: number) {
       const clearance = world.terrain.heightAt(x, z) + 0.5 - lerp(camPos.y, p.y + 1, u);
       if (clearance > 0) camPos.y += clearance / (1 - u);
     }
-    camera.fov = lerp(camera.fov, 55 + Math.min(1, speed / 32) * 14, damp(2, dt));
+    camera.fov = lerp(camera.fov, 55 + Math.min(1, speed / 32) * 10, damp(2, dt));
   }
   applyLook();
   blendIntro(dt);
