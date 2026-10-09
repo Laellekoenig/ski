@@ -11,6 +11,10 @@ export interface InputState {
   resetPressed: boolean;
   mutePressed: boolean;
   anyPressed: boolean;
+  /** mouse drag-to-look: held, plus pixels moved since last frame */
+  looking: boolean;
+  lookDX: number;
+  lookDY: number;
 }
 
 const LEFT = ["KeyA", "ArrowLeft"];
@@ -22,6 +26,11 @@ export class Input {
   private down = new Set<string>();
   private pressed = new Set<string>();
   private padPrev: boolean[] = [];
+  private dragId: number | null = null;
+  private dragX = 0;
+  private dragY = 0;
+  private lastX = 0;
+  private lastY = 0;
   readonly state: InputState = {
     steer: 0,
     tuck: false,
@@ -32,6 +41,9 @@ export class Input {
     resetPressed: false,
     mutePressed: false,
     anyPressed: false,
+    looking: false,
+    lookDX: 0,
+    lookDY: 0,
   };
 
   constructor() {
@@ -43,6 +55,31 @@ export class Input {
     window.addEventListener("keyup", (e) => this.down.delete(e.code));
     window.addEventListener("blur", () => this.down.clear());
     window.addEventListener("pointerdown", () => this.pressed.add("Pointer"));
+
+    const canvas = document.getElementById("game")!;
+    canvas.addEventListener("pointerdown", (e) => {
+      if (e.button !== 0 || this.dragId !== null) return;
+      this.dragId = e.pointerId;
+      this.lastX = e.clientX;
+      this.lastY = e.clientY;
+      canvas.classList.add("dragging");
+      canvas.setPointerCapture(e.pointerId);
+    });
+    canvas.addEventListener("pointermove", (e) => {
+      if (e.pointerId !== this.dragId) return;
+      this.dragX += e.clientX - this.lastX;
+      this.dragY += e.clientY - this.lastY;
+      this.lastX = e.clientX;
+      this.lastY = e.clientY;
+    });
+    const release = (e: PointerEvent) => {
+      if (e.pointerId !== this.dragId) return;
+      this.dragId = null;
+      canvas.classList.remove("dragging");
+    };
+    canvas.addEventListener("pointerup", release);
+    canvas.addEventListener("pointercancel", release);
+    canvas.addEventListener("lostpointercapture", release);
   }
 
   private any(codes: string[]) {
@@ -86,6 +123,10 @@ export class Input {
     s.resetPressed = resetPressed;
     s.mutePressed = mutePressed;
     s.anyPressed = anyPressed;
+    s.looking = this.dragId !== null;
+    s.lookDX = this.dragX;
+    s.lookDY = this.dragY;
+    this.dragX = this.dragY = 0;
     this.pressed.clear();
   }
 }
