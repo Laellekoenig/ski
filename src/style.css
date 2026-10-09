@@ -20,6 +20,7 @@ body {
   font-family: "Fredoka", ui-rounded, system-ui, sans-serif;
   color: var(--ink);
   user-select: none;
+  cursor: none;
 }
 
 #game {
@@ -28,12 +29,8 @@ body {
   width: 100%;
   height: 100%;
   display: block;
-  cursor: grab;
+  cursor: none;
   touch-action: none;
-}
-
-#game.dragging {
-  cursor: grabbing;
 }
 
 .hidden {

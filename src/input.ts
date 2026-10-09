@@ -62,7 +62,6 @@ export class Input {
       this.dragId = e.pointerId;
       this.lastX = e.clientX;
       this.lastY = e.clientY;
-      canvas.classList.add("dragging");
       canvas.setPointerCapture(e.pointerId);
     });
     canvas.addEventListener("pointermove", (e) => {
@@ -75,7 +74,6 @@ export class Input {
     const release = (e: PointerEvent) => {
       if (e.pointerId !== this.dragId) return;
       this.dragId = null;
-      canvas.classList.remove("dragging");
     };
     canvas.addEventListener("pointerup", release);
     canvas.addEventListener("pointercancel", release);
