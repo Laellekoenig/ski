@@ -10,20 +10,7 @@
     <canvas id="game"></canvas>
 
     <div id="hud" class="hidden">
-      <div class="card score">
-        <div class="label">this run</div>
-        <div class="big"><span id="dist">0</span><small>m</small></div>
-        <div class="sub">best <span id="best">0</span> m</div>
-      </div>
-      <div class="card speedo"><span id="speed">0</span><small>km/h</small></div>
-      <div class="card location"><div id="region-name">Vierwind summit</div><div id="conditions"></div><span id="altitude">640 m</span></div>
-      <button class="card map" id="open-map" aria-label="Open trail map" aria-expanded="false">
-        <span class="map-heading">VIERWIND <span>N ↑</span></span>
-        <canvas id="minimap" aria-label="Mountain minimap"></canvas>
-        <span class="map-footer">Trail map <kbd>Tab</kbd></span>
-      </button>
-      <div id="prompt"></div>
-      <div id="toasts"></div>
+      <div class="distance"><span id="dist">0</span> m</div>
     </div>
 
     <section id="map-panel" role="dialog" aria-modal="true" aria-labelledby="map-title" hidden>

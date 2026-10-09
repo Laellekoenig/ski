@@ -46,10 +46,7 @@ function endRun(distance: number) {
   if (distance > best && distance > 20) {
     best = distance;
     localStorage.setItem(BEST_KEY, String(Math.floor(best)));
-    hud.toast(`New best! ${Math.floor(distance).toLocaleString("en-US")} m`, "best");
     audio.best();
-  } else if (distance > 20) {
-    hud.toast(`Run: ${Math.floor(distance).toLocaleString("en-US")} m`, "info");
   }
 }
 
@@ -87,18 +84,11 @@ pause.onChoose = (choice) => {
 player.events = {
   onJump: () => audio.jump(),
   onLand: (impact) => audio.land(impact),
-  onCrash: () => {
-    audio.crash();
-    hud.toast(["Oof!", "Whoops!", "Bonk!", "Oopsie!"][Math.floor(Math.random() * 4)]);
-  },
-  onTrick: (label) => {
-    audio.trick();
-    hud.toast(label);
-  },
-  onBoard: (lift, dist) => {
+  onCrash: () => audio.crash(),
+  onTrick: () => audio.trick(),
+  onBoard: (_lift, dist) => {
     audio.board();
     endRun(dist);
-    hud.toast(lift.def.name, "info");
   },
   onDismount: () => audio.board(),
 };
@@ -246,10 +236,7 @@ let last = performance.now();
 let time = 0;
 
 function updateHud() {
-  let prompt = "";
-  if (player.state === "lift" && player.lift) prompt = `riding ${player.lift.def.name} · hold <kbd>Space</kbd> to hurry`;
-  else if (player.nearbyLift) prompt = `<kbd>E</kbd> ride the ${player.nearbyLift.def.name}`;
-  hud.update(player.runDistance, best, player.speed, started ? prompt : "", player.pos.x, player.pos.z, player.heading, player.surface);
+  hud.update(player.runDistance, player.pos.x, player.pos.z, player.heading);
 }
 
 function frame(now: number) {

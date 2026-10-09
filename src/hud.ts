@@ -1,6 +1,5 @@
 import type { World } from "./world";
-import { BOUNDS, KICKERS, LAKES, PISTES, REGIONS, landscapeAt } from "./layout";
-import type { Surface } from "./terrain";
+import { BOUNDS, KICKERS, LAKES, PISTES, landscapeAt } from "./layout";
 
 const MAP_W = 190;
 const MAP_H = Math.round((MAP_W * (BOUNDS.maxZ - BOUNDS.minZ)) / (BOUNDS.maxX - BOUNDS.minX));
@@ -9,42 +8,19 @@ const fmt = (m: number) => `${Math.floor(m).toLocaleString("en-US")}`;
 
 export class Hud {
   private distEl = document.getElementById("dist")!;
-  private bestEl = document.getElementById("best")!;
-  private speedEl = document.getElementById("speed")!;
-  private promptEl = document.getElementById("prompt")!;
-  private toastEl = document.getElementById("toasts")!;
   private titleEl = document.getElementById("title")!;
   private hudEl = document.getElementById("hud")!;
-  private map: HTMLCanvasElement;
-  private mapCtx: CanvasRenderingContext2D;
-  private mapBg: HTMLCanvasElement;
   private largeMap = document.getElementById("trail-map") as HTMLCanvasElement;
   private largeCtx: CanvasRenderingContext2D;
   private largeBg: HTMLCanvasElement;
-  private regionEl = document.getElementById("region-name")!;
-  private conditionsEl = document.getElementById("conditions")!;
-  private altitudeEl = document.getElementById("altitude")!;
-  private world: World;
   mapOpen = false;
   onMapChange: () => void = () => {};
   private lastDist = -1;
-  private lastPrompt = "";
 
   constructor(world: World) {
-    this.world = world;
-    this.map = document.getElementById("minimap") as HTMLCanvasElement;
-    const dpr = Math.min(2, window.devicePixelRatio || 1);
-    this.map.width = MAP_W * dpr;
-    this.map.height = MAP_H * dpr;
-    this.map.style.width = `${MAP_W}px`;
-    this.map.style.height = `${MAP_H}px`;
-    this.mapCtx = this.map.getContext("2d")!;
-    this.mapCtx.scale(dpr, dpr);
-    this.mapBg = this.drawMapBackground(world, dpr);
     this.largeMap.width = this.largeMap.height = 760;
     this.largeCtx = this.largeMap.getContext("2d")!;
     this.largeBg = this.drawMapBackground(world, 4, true);
-    document.getElementById("open-map")!.addEventListener("click", () => this.toggleMap());
     document.getElementById("close-map")!.addEventListener("click", () => this.toggleMap(false));
   }
 
@@ -175,33 +151,16 @@ export class Hud {
     this.mapOpen = open;
     const panel = document.getElementById("map-panel")!;
     panel.hidden = !open;
-    document.getElementById("open-map")!.setAttribute("aria-expanded", String(open));
     this.onMapChange();
     if (open) document.getElementById("close-map")!.focus();
-    else document.getElementById("open-map")!.focus();
   }
 
-  update(dist: number, best: number, speed: number, prompt: string, px: number, pz: number, heading: number, surface: Surface) {
+  update(dist: number, px: number, pz: number, heading: number) {
     const d = Math.floor(dist);
     if (d !== this.lastDist) {
       this.lastDist = d;
       this.distEl.textContent = fmt(d);
     }
-    this.bestEl.textContent = fmt(best);
-    this.speedEl.textContent = `${Math.round(speed * 3.6)}`;
-    if (prompt !== this.lastPrompt) {
-      this.lastPrompt = prompt;
-      this.promptEl.innerHTML = prompt;
-      this.promptEl.classList.toggle("show", prompt !== "");
-    }
-
-    const region = REGIONS[landscapeAt(px, pz)];
-    this.regionEl.textContent = region.name;
-    const condition = this.world.weather.intensity > 0.45 ? "Snowstorm · low visibility" : surface === "ice" ? "Frozen lake · slippery ice" : surface === "powder" ? "Deep powder · soft & slow" : region.detail;
-    this.conditionsEl.textContent = condition;
-    this.altitudeEl.textContent = `${Math.round(this.world.terrain.heightAt(px, pz))} m`;
-    this.regionEl.style.setProperty("--region-color", region.color);
-    this.drawPlayerMap(this.mapCtx, this.mapBg, px, pz, heading);
     if (this.mapOpen) {
       this.largeCtx.save(); this.largeCtx.scale(4, 4);
       this.drawPlayerMap(this.largeCtx, this.largeBg, px, pz, heading);
@@ -229,13 +188,5 @@ export class Hud {
     ctx.fill();
     ctx.stroke();
     ctx.restore();
-  }
-
-  toast(text: string, kind = "") {
-    const el = document.createElement("div");
-    el.className = `toast ${kind}`;
-    el.textContent = text;
-    this.toastEl.appendChild(el);
-    setTimeout(() => el.remove(), 2200);
   }
 }
