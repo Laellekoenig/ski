@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/assets/icon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>A Short Ski</title>
+  </head>
+  <body>
+    <canvas id="game"></canvas>
+
+    <div id="hud" class="hidden">
+      <div class="card score">
+        <div class="label">this run</div>
+        <div class="big"><span id="dist">0</span><small>m</small></div>
+        <div class="sub">best <span id="best">0</span> m</div>
+      </div>
+      <div class="card speedo"><span id="speed">0</span><small>km/h</small></div>
+      <div class="card map"><canvas id="minimap"></canvas></div>
+      <div id="prompt"></div>
+      <div id="toasts"></div>
+    </div>
+
+    <div id="title">
+      <div class="title-card">
+        <h1>A Short Ski</h1>
+        <p class="tag">one mountain · three lifts · how far can you go?</p>
+        <ul class="keys">
+          <li><kbd>A</kbd><kbd>D</kbd> steer</li>
+          <li><kbd>W</kbd> tuck / skate</li>
+          <li><kbd>S</kbd> brake</li>
+          <li><kbd>Space</kbd> jump (steer to spin)</li>
+          <li><kbd>E</kbd> ride lift</li>
+          <li><kbd>R</kbd> back to summit</li>
+          <li><kbd>M</kbd> mute</li>
+        </ul>
+        <p class="start">press any key to start</p>
+      </div>
+    </div>
+
+    <div id="loading">sculpting the mountain…</div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
