@@ -10,6 +10,10 @@ export { makeSki } from "./equipment";
 const DARK = 0x181d23;
 const THIGH = 0.39;
 const SHIN = 0.38;
+/** Grip to pole tip. */
+const POLE = 0.95;
+/** Skating stride cycle (left push + right push), rad/s. */
+const SKATE_RATE = 5.4;
 const UP = new THREE.Vector3(0, 1, 0);
 
 export interface PoseInput {
@@ -108,6 +112,8 @@ export class Skier {
   private hipY = 0.94;
   private time = 0;
   private skatePhase = 0;
+  /** Skating weight, faded out whenever the skis leave the snow. */
+  private skating = 0;
   private spread = 0;
   private plow = 0;
   private duck = 0;
@@ -249,16 +255,18 @@ export class Skier {
   private tmpF = new THREE.Vector3();
   private tmpK = new THREE.Vector3();
   private tmpG = new THREE.Vector3();
+  private tmpV = new THREE.Vector3();
+  private tmpB = new THREE.Vector3();
   private tmpM = new THREE.Matrix4();
 
   private solveLeg(leg: Leg, hip: THREE.Vector3, foot: THREE.Vector3) {
-    const vz = foot.z - hip.z;
-    const vy = foot.y - hip.y;
-    const d = Math.min(Math.hypot(vz, vy), THIGH + SHIN - 0.001);
-    const phiV = Math.atan2(vz, -vy);
+    const v = this.tmpV.subVectors(foot, hip);
+    const d = Math.min(v.length(), THIGH + SHIN - 0.001);
+    v.normalize();
     const alpha = Math.acos(THREE.MathUtils.clamp((THIGH * THIGH + d * d - SHIN * SHIN) / (2 * THIGH * d), -1, 1));
-    const phiT = phiV + alpha;
-    this.tmpK.set(lerp(hip.x, foot.x, 0.5), hip.y - Math.cos(phiT) * THIGH, hip.z + Math.sin(phiT) * THIGH);
+    // the knee bends forward, square to the hip-foot line, so legs pushed out wide still fold true
+    const bend = this.tmpB.set(0, 0, 1).addScaledVector(v, -v.z).normalize();
+    this.tmpK.copy(hip).addScaledVector(v, Math.cos(alpha) * THIGH).addScaledVector(bend, Math.sin(alpha) * THIGH);
     // Limbs are lathed from their lower joint up.
     this.placeSegment(leg.thigh, this.tmpK, hip);
     this.placeSegment(leg.shin, foot, this.tmpK);
@@ -309,6 +317,7 @@ export class Skier {
     // --- carving: lean into the load, edges bite, the upper body stays quiet over the skis
     this.plow = lerp(this.plow, p.brake ? 1 : 0, k(8));
     this.duck = lerp(this.duck, p.duck && grounded ? 1 : 0, k(7));
+    this.skating = lerp(this.skating, grounded ? p.skate : 0, k(8));
     const edgeT = grounded ? (p.edge ?? p.turn * (0.15 + speedN * 0.4)) * (1 - this.plow * 0.6) : 0;
     const lean = this.leanS.step(edgeT, dt);
     const side = Math.abs(edgeT) > 0.14 ? Math.sign(edgeT) : Math.abs(edgeT) < 0.05 ? 0 : this.edgeSide;
@@ -325,6 +334,7 @@ export class Skier {
     if (p.tuck) crouchT = 0.95 + Math.abs(lean) * 0.1;
     if (p.duck) crouchT = 1.15;
     if (p.brake) crouchT = 0.45;
+    crouchT = lerp(crouchT, 0.68, this.skating);
     crouchT += (p.absorb ?? 0) - cross;
     if (p.air) crouchT = tricks ? lerp(lerp(0.62, 0.05, pop), 0.35, this.reach) : 0.75;
     crouchT = Math.min(1.2, crouchT + p.squash);
@@ -339,7 +349,7 @@ export class Skier {
     this.air = lerp(this.air, p.air ? 1 : 0, k(8));
     this.seat = lerp(this.seat, p.seated ? 1 : 0, k(6));
     this.flail = lerp(this.flail, p.crashed ? 1 : 0, k(10));
-    if (p.skate > 0.05) this.skatePhase += dt * 6;
+    if (this.skating > 0.05) this.skatePhase += dt * SKATE_RATE;
     this.walk = lerp(this.walk, p.walk ?? 0, k(10));
     this.wave = lerp(this.wave, p.wave ?? 0, k(8));
     if (this.walk > 0.02) this.walkPhase += dt * 10;
@@ -350,33 +360,51 @@ export class Skier {
     const bob = Math.sin(t * 2.2) * 0.008 * (1 - speedN);
     // skis chatter when they skid, and the snow buzzes through them at speed
     const chatter = grounded ? Math.sin(t * 61) * Math.sin(t * 23.7) * (skid * 0.6 + speedN * speedN * 0.3) : 0;
-    const skate = Math.sin(this.skatePhase) * p.skate;
+    // skating, V2 style: every leg push gets a double-pole drive. Half-cycle `beat` 0 is the new
+    // ski touching down under the body with both poles planted; the arms then drive down and back
+    // while the torso crunches over them and the other leg kicks out wide off its inside edge.
+    const sk = this.skating;
+    const beat = (this.skatePhase / Math.PI) % 1;
+    const crunch = smoothstep(beat, 0, 0.3) * (1 - smoothstep(beat, 0.4, 0.85)) * sk;
+    const drive = smoothstep(beat, 0, 0.42) - smoothstep(beat, 0.5, 0.85);
+    // weight rides over the right ski at phase 0 and is thrown across onto the left one by π
+    const sway = Math.sin(this.skatePhase) * sk;
     const stride = Math.sin(this.walkPhase) * this.walk;
     this.hips.position.set(
-      skate * 0.06 - lean * 0.08,
-      this.hipY + bob + Math.abs(skate) * 0.03 + Math.abs(stride) * 0.025 + chatter * 0.01,
-      -this.crouch * 0.08 - pitch * 0.05,
+      Math.cos(this.skatePhase) * sk * 0.13 - lean * 0.08,
+      this.hipY + bob - crunch * 0.06 + Math.abs(stride) * 0.025 + chatter * 0.01,
+      -this.crouch * 0.08 - pitch * 0.05 - crunch * 0.05,
     );
     this.lean.rotation.z = lean;
+    // shoulders lead the weight across and turn to face the new gliding ski
     this.torso.rotation.set(
-      0.04 + this.crouch * 0.52 + this.duck * 0.4 - this.seat * 0.15 + pitch + this.fold * 0.3 + this.grab * 0.25,
-      twist,
-      skate * 0.1 - lean * 0.45,
+      0.04 + this.crouch * 0.52 + this.duck * 0.4 - this.seat * 0.15 + pitch + this.fold * 0.3 + this.grab * 0.25 + crunch * 0.5 + sk * 0.08,
+      twist - sway * 0.14,
+      sway * 0.12 - lean * 0.45,
     );
     // eyes stay level and ahead; they look into the turn and down at the landing
     this.head.rotation.x = -this.torso.rotation.x * 0.7 + this.reach * 0.25;
-    this.head.rotation.y = lerp(this.head.rotation.y, -p.turn * 0.35 + twist * (grounded ? -1 : 0.6), k(5));
-    this.head.rotation.z = -lean * 0.25;
+    this.head.rotation.y = lerp(this.head.rotation.y, -p.turn * 0.35 + twist * (grounded ? -1 : 0.6) + sway * 0.11, k(5));
+    this.head.rotation.z = -lean * 0.25 - sway * 0.1;
 
     // --- legs
     const tweak = this.style === AIR_SAFETY_L ? -1 : this.style === AIR_SAFETY_R ? 1 : 0;
     for (const leg of this.legs) {
       const s = leg.side;
       const hip = this.tmpH.set(s * 0.12 + this.hips.position.x, this.hips.position.y, this.hips.position.z);
-      const legSkate = Math.max(0, s * skate);
+      // skating: set down under the body, glide, then extend out and back off the inside edge;
+      // the spent ski lifts and swings back in while the other leg works
+      const u = (this.skatePhase / (Math.PI * 2) + (s > 0 ? 0 : 0.5)) % 1;
+      const back = Math.max(0, u * 2 - 1);
+      const kick = u < 0.5 ? smoothstep(u, 0.05, 0.5) : 1 - smoothstep(back, 0, 0.75);
+      const lift = u < 0.5 ? 0 : Math.sin(Math.PI * Math.min(1, back / 0.9));
       // the inside ski leads a little through the turn
       const inside = Math.max(0, -s * Math.sign(lean)) * Math.min(1, Math.abs(lean) / 0.6);
-      const foot = this.tmpF.set(s * (0.13 + this.spread + legSkate * 0.12), 0.25 + legSkate * 0.06, inside * 0.09);
+      const foot = this.tmpF.set(
+        lerp(s * (0.13 + this.spread), s * (0.08 + kick * 0.42), sk),
+        0.25 + (kick * 0.025 + lift * 0.11) * sk,
+        inside * 0.09 + (lift * 0.05 - kick * 0.12) * sk,
+      );
       // Lean the torso while keeping both bindings on the snow plane.
       // The leg solver then bends each knee toward its grounded boot.
       const stanceX = foot.x;
@@ -401,9 +429,9 @@ export class Skier {
       leg.ski.position.set(foot.x, foot.y - 0.25, foot.z);
       // carving rolls the skis further over than the body; skidding flattens and twists them across
       leg.ski.rotation.set(
-        this.seat * -0.3 + this.air * -0.12 - this.fold * 0.1 + chatter * 0.03,
-        -s * this.plow * 0.28 + s * legSkate * 0.35 - Math.sign(lean) * skid * 0.2 * Math.min(1, Math.abs(lean) * 3),
-        lerp(0.12, -0.45, skid) * lean + tweak * this.grab * 0.35,
+        this.seat * -0.3 + this.air * -0.12 - this.fold * 0.1 + chatter * 0.03 - lift * sk * 0.12,
+        -s * this.plow * 0.28 + s * sk * (0.2 + kick * 0.08) - Math.sign(lean) * skid * 0.2 * Math.min(1, Math.abs(lean) * 3),
+        lerp(0.12, -0.45, skid) * lean + tweak * this.grab * 0.35 + s * kick * sk * 0.38,
       );
     }
 
@@ -425,7 +453,9 @@ export class Skier {
       }
       fwd = lerp(fwd, 1.8, this.duck);
       out = lerp(out, -0.12, this.duck);
-      if (p.skate > 0.05) fwd = 0.6 + Math.sin(this.skatePhase + (s > 0 ? 0 : Math.PI)) * 0.6;
+      // skating: both arms reach forward to plant, then drive down and back past the hips
+      fwd = lerp(fwd, lerp(0.95, -1.0, drive), sk);
+      out = lerp(out, 0.16 + drive * 0.22, sk);
       // flight: arms swing up off the lip, spread for balance, then forward to meet the landing
       fwd = lerp(fwd, lerp(0.35, 1.25, pop) + Math.sin(t * 2.3 + s) * 0.12 + (this.style === AIR_TUCK ? this.fold * 0.6 : 0), this.air);
       out = lerp(out, 0.75 + this.spinning * 0.5 - (this.style === AIR_TUCK ? this.fold * 0.4 : 0), this.air);
@@ -447,11 +477,28 @@ export class Skier {
         fwd = lerp(fwd, -aim.x, grab);
         out = lerp(out, s * aim.z, grab);
       }
-      this.forearms[i].rotation.x = lerp(-0.4, -0.1, grab);
-      arm.rotation.x = lerp(arm.rotation.x, -fwd, k(10));
-      arm.rotation.z = lerp(arm.rotation.z, s * out, k(10));
+      // elbows bend for the plant and lock out at the end of the drive
+      this.forearms[i].rotation.x = lerp(lerp(-0.4, lerp(-0.55, -0.05, drive), sk), -0.1, grab);
+      const armRate = k(10 + sk * 14);
+      arm.rotation.x = lerp(arm.rotation.x, -fwd, armRate);
+      arm.rotation.z = lerp(arm.rotation.z, s * out, armRate);
       // poles trail behind, roughly parallel to the slope; a plant swings the tip forward into the snow
-      pole.rotation.x = lerp(pole.rotation.x, fwd + 0.75 - plant * 0.9 + (p.tuck ? 0.9 : 0) - this.duck * 0.6 - this.seat * 0.6, k(10));
+      let poleX = fwd + 0.75 - plant * 0.9 + (p.tuck ? 0.9 : 0) - this.duck * 0.6 - this.seat * 0.6;
+      if (sk > 0.01) {
+        // skating: keep the tips on the snow through the drive, then swing them through for the next plant
+        const hand = this.tmpV.copy(pole.position);
+        for (const part of [this.forearms[i], arm, this.torso, this.hips]) {
+          part.updateMatrix();
+          hand.applyMatrix4(part.matrix);
+        }
+        const height = hand.x * Math.sin(lean) + hand.y * Math.cos(lean);
+        const planted = Math.acos(clamp(height / (POLE * Math.cos(out * 0.4)), 0, 1));
+        const hold = smoothstep(beat, 0, 0.05) * (1 - smoothstep(beat, 0.42, 0.52));
+        const swing = Math.max(planted, lerp(1, 0.15, smoothstep(beat, 0.55, 0.95)));
+        const chain = this.torso.rotation.x + arm.rotation.x + this.forearms[i].rotation.x;
+        poleX = lerp(poleX, lerp(swing, planted, hold) - chain, sk);
+      }
+      pole.rotation.x = lerp(pole.rotation.x, poleX, k(10 + sk * 30));
       pole.rotation.z = lerp(pole.rotation.z, -s * out * 0.6, k(10));
     }
   }
