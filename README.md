@@ -19,6 +19,7 @@ Choose one of four human riders with **1–4**, left/right arrows, or their name
 | Key | Action |
 | --- | --- |
 | `A` / `D` (or arrows) | steer; spin in the air |
+| `Q` / `E` | gentle, wider curve; slower spin in the air |
 | `W` | tuck for speed, or skate when slow |
 | `S` | brake / snowplough |
 | `Space` | jump |

@@ -27,6 +27,10 @@ export interface InputState {
 
 const LEFT = ["KeyA", "ArrowLeft"];
 const RIGHT = ["KeyD", "ArrowRight"];
+/** Q / E: a wider, gentler curve than A / D. */
+const GENTLE_LEFT = ["KeyQ"];
+const GENTLE_RIGHT = ["KeyE"];
+const GENTLE_STEER = 0.4;
 const UP = ["KeyW", "ArrowUp"];
 const DOWN = ["KeyS", "ArrowDown"];
 
@@ -101,12 +105,13 @@ export class Input {
 
   update() {
     const s = this.state;
-    let steer = (this.any(RIGHT) ? 1 : 0) - (this.any(LEFT) ? 1 : 0);
+    const side = (full: string[], gentle: string[]) => (this.any(full) ? 1 : this.any(gentle) ? GENTLE_STEER : 0);
+    let steer = side(RIGHT, GENTLE_RIGHT) - side(LEFT, GENTLE_LEFT);
     let tuck = this.any(UP);
     let brake = this.any(DOWN);
     let jumpHeld = this.down.has("Space");
     let jumpPressed = this.pressed.has("Space");
-    let actionPressed = this.pressed.has("KeyE") || this.pressed.has("Enter");
+    let actionPressed = this.pressed.has("Enter");
     let resetPressed = this.pressed.has("KeyR");
     const mutePressed = this.pressed.has("KeyM");
     let startPressed = this.pressed.has("Enter") || this.pressed.has("NumpadEnter") || this.pressed.has("Space");

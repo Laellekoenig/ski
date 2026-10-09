@@ -387,8 +387,9 @@ export class Player {
     if (Math.abs(dh) > 1) dh = 0; // landed switch and spun round
     this.lastHeading = this.heading;
     this.yawRate = lerp(this.yawRate, this.grounded && !crashed ? dh / dt : 0, damp(12, dt));
-    // (the arcade turn rate is tight at low speed, so slow turns lean less than physics would ask)
-    const edge = THREE.MathUtils.clamp(-Math.atan((speed * this.yawRate) / G) * Math.min(0.8, 0.35 + speed / 30), -0.75, 0.75);
+    // (the arcade turn rate is far tighter than real carving, so the lean eases toward its limit
+    // instead of saturating: a gentle curve still leans visibly less than a hard one at speed)
+    const edge = -0.75 * Math.tanh(((speed * this.yawRate) / G) * 0.55);
     this.accel = lerp(this.accel, this.grounded ? (speed - this.lastSpeed) / dt : 0, damp(6, dt));
     this.lastSpeed = speed;
     // terrain curvature along the line of travel: compressions push up, crests drop away
