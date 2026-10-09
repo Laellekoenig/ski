@@ -4,6 +4,8 @@ export interface InputState {
   /** -1 left .. 1 right */
   steer: number;
   tuck: boolean;
+  /** Shift: drop into a low racing crouch, faster but with little steering. */
+  duck: boolean;
   brake: boolean;
   jumpHeld: boolean;
   jumpPressed: boolean;
@@ -33,6 +35,7 @@ const GENTLE_RIGHT = ["KeyE"];
 const GENTLE_STEER = 0.4;
 const UP = ["KeyW", "ArrowUp"];
 const DOWN = ["KeyS", "ArrowDown"];
+const DUCK = ["ShiftLeft", "ShiftRight"];
 
 export class Input {
   private down = new Set<string>();
@@ -46,6 +49,7 @@ export class Input {
   readonly state: InputState = {
     steer: 0,
     tuck: false,
+    duck: false,
     brake: false,
     jumpHeld: false,
     jumpPressed: false,
@@ -109,6 +113,7 @@ export class Input {
     let steer = side(RIGHT, GENTLE_RIGHT) - side(LEFT, GENTLE_LEFT);
     let tuck = this.any(UP);
     let brake = this.any(DOWN);
+    let duck = this.any(DUCK);
     let jumpHeld = this.down.has("Space");
     let jumpPressed = this.pressed.has("Space");
     let actionPressed = this.pressed.has("Enter");
@@ -134,6 +139,7 @@ export class Input {
       const edge = (i: number) => b(i) && !this.padPrev[i];
       tuck ||= b(7) || (pad.axes[1] ?? 0) < -0.5;
       brake ||= b(6) || (pad.axes[1] ?? 0) > 0.5;
+      duck ||= b(5);
       jumpHeld ||= b(0);
       jumpPressed ||= edge(0);
       actionPressed ||= edge(2) || edge(1);
@@ -149,6 +155,7 @@ export class Input {
 
     s.steer = Math.max(-1, Math.min(1, steer));
     s.tuck = tuck;
+    s.duck = duck;
     s.brake = brake;
     s.jumpHeld = jumpHeld;
     s.jumpPressed = jumpPressed;

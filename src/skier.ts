@@ -16,6 +16,8 @@ export interface PoseInput {
   /** -1 (left) .. 1 (right) */
   turn: number;
   tuck: boolean;
+  /** Low racing crouch: chest down over the knees, hands together in front. */
+  duck?: boolean;
   brake: boolean;
   air: boolean;
   /** 0..1, pushing off at low speed */
@@ -144,6 +146,7 @@ export class Skier {
   private skatePhase = 0;
   private spread = 0;
   private plow = 0;
+  private duck = 0;
   private air = 0;
   private seat = 0;
   private flail = 0;
@@ -410,6 +413,7 @@ export class Skier {
 
     // --- carving: lean into the load, edges bite, the upper body stays quiet over the skis
     this.plow = lerp(this.plow, p.brake ? 1 : 0, k(8));
+    this.duck = lerp(this.duck, p.duck && grounded ? 1 : 0, k(7));
     const edgeT = grounded ? (p.edge ?? p.turn * (0.15 + speedN * 0.4)) * (1 - this.plow * 0.6) : 0;
     const lean = this.leanS.step(edgeT, dt);
     const side = Math.abs(edgeT) > 0.14 ? Math.sign(edgeT) : Math.abs(edgeT) < 0.05 ? 0 : this.edgeSide;
@@ -424,6 +428,7 @@ export class Skier {
 
     let crouchT = 0.25 + speedN * 0.25 + Math.abs(lean) * 0.3;
     if (p.tuck) crouchT = 0.95 + Math.abs(lean) * 0.1;
+    if (p.duck) crouchT = 1.15;
     if (p.brake) crouchT = 0.45;
     crouchT += (p.absorb ?? 0) - cross;
     if (p.air) crouchT = tricks ? lerp(lerp(0.62, 0.05, pop), 0.35, this.reach) : 0.75;
@@ -459,7 +464,7 @@ export class Skier {
     );
     this.lean.rotation.z = lean;
     this.torso.rotation.set(
-      0.04 + this.crouch * 0.52 - this.seat * 0.15 + pitch + this.fold * 0.3 + this.grab * 0.25,
+      0.04 + this.crouch * 0.52 + this.duck * 0.4 - this.seat * 0.15 + pitch + this.fold * 0.3 + this.grab * 0.25,
       twist,
       skate * 0.1 - lean * 0.45,
     );
@@ -523,6 +528,8 @@ export class Skier {
         fwd = 1.15;
         out = 0.05;
       }
+      fwd = lerp(fwd, 1.8, this.duck);
+      out = lerp(out, -0.12, this.duck);
       if (p.skate > 0.05) fwd = 0.6 + Math.sin(this.skatePhase + (s > 0 ? 0 : Math.PI)) * 0.6;
       // flight: arms swing up off the lip, spread for balance, then forward to meet the landing
       fwd = lerp(fwd, lerp(0.35, 1.25, pop) + Math.sin(t * 2.3 + s) * 0.12 + (this.style === AIR_TUCK ? this.fold * 0.6 : 0), this.air);
@@ -549,7 +556,7 @@ export class Skier {
       arm.rotation.x = lerp(arm.rotation.x, -fwd, k(10));
       arm.rotation.z = lerp(arm.rotation.z, s * out, k(10));
       // poles trail behind, roughly parallel to the slope; a plant swings the tip forward into the snow
-      pole.rotation.x = lerp(pole.rotation.x, fwd + 0.75 - plant * 0.9 + (p.tuck ? 0.9 : 0) - this.seat * 0.6, k(10));
+      pole.rotation.x = lerp(pole.rotation.x, fwd + 0.75 - plant * 0.9 + (p.tuck ? 0.9 : 0) - this.duck * 0.6 - this.seat * 0.6, k(10));
       pole.rotation.z = lerp(pole.rotation.z, -s * out * 0.6, k(10));
     }
   }
