@@ -26,6 +26,7 @@ export class Hud {
   private altitudeEl = document.getElementById("altitude")!;
   private world: World;
   mapOpen = false;
+  onMapChange: () => void = () => {};
   private lastDist = -1;
   private lastPrompt = "";
 
@@ -170,10 +171,12 @@ export class Hud {
   }
 
   toggleMap(open = !this.mapOpen) {
+    if (open === this.mapOpen) return;
     this.mapOpen = open;
     const panel = document.getElementById("map-panel")!;
     panel.hidden = !open;
     document.getElementById("open-map")!.setAttribute("aria-expanded", String(open));
+    this.onMapChange();
     if (open) document.getElementById("close-map")!.focus();
     else document.getElementById("open-map")!.focus();
   }

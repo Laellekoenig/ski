@@ -96,7 +96,6 @@ export class Player {
 
   /** Every new run starts at the same central peak, ready to choose a face. */
   spawnAtSummit() {
-    if (this.lift) this.lift.rideChair.visible = false;
     this.pos.set(SUMMIT.x, this.world.terrain.heightAt(SUMMIT.x, SUMMIT.z), SUMMIT.z);
     this.heading = Math.PI / 4;
     this.resetMotion();
@@ -104,6 +103,8 @@ export class Player {
   }
 
   private resetMotion() {
+    // Clear the ride chair on both normal dismounts and summit resets.
+    if (this.lift) this.lift.rideChair.visible = false;
     this.state = "ski";
     this.grounded = true;
     this.lift = null;
@@ -157,7 +158,6 @@ export class Player {
     this.pos.y -= 2.82;
     this.vel.set(0, 0, 0);
     if (this.rideS >= lift.rideLength) {
-      lift.rideChair.visible = false;
       this.spawnAtTop(lift);
       this.squash = 0.4;
       this.events.onDismount?.(lift);

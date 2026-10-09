@@ -12,7 +12,16 @@ export interface InputState {
   mutePressed: boolean;
   mapPressed: boolean;
   closeMapPressed: boolean;
+  pausePressed: boolean;
+  /** pause menu navigation, edge-triggered */
+  menuUp: boolean;
+  menuDown: boolean;
+  confirmPressed: boolean;
   anyPressed: boolean;
+  /** mouse drag-to-look: held, plus pixels moved since last frame */
+  looking: boolean;
+  lookDX: number;
+  lookDY: number;
 }
 
 const LEFT = ["KeyA", "ArrowLeft"];
@@ -24,6 +33,11 @@ export class Input {
   private down = new Set<string>();
   private pressed = new Set<string>();
   private padPrev: boolean[] = [];
+  private dragId: number | null = null;
+  private dragX = 0;
+  private dragY = 0;
+  private lastX = 0;
+  private lastY = 0;
   readonly state: InputState = {
     steer: 0,
     tuck: false,
@@ -35,7 +49,14 @@ export class Input {
     mutePressed: false,
     mapPressed: false,
     closeMapPressed: false,
+    pausePressed: false,
+    menuUp: false,
+    menuDown: false,
+    confirmPressed: false,
     anyPressed: false,
+    looking: false,
+    lookDX: 0,
+    lookDY: 0,
   };
 
   constructor() {
@@ -47,6 +68,29 @@ export class Input {
     window.addEventListener("keyup", (e) => this.down.delete(e.code));
     window.addEventListener("blur", () => this.down.clear());
     window.addEventListener("pointerdown", () => this.pressed.add("Pointer"));
+
+    const canvas = document.getElementById("game")!;
+    canvas.addEventListener("pointerdown", (e) => {
+      if (e.button !== 0 || this.dragId !== null) return;
+      this.dragId = e.pointerId;
+      this.lastX = e.clientX;
+      this.lastY = e.clientY;
+      canvas.setPointerCapture(e.pointerId);
+    });
+    canvas.addEventListener("pointermove", (e) => {
+      if (e.pointerId !== this.dragId) return;
+      this.dragX += e.clientX - this.lastX;
+      this.dragY += e.clientY - this.lastY;
+      this.lastX = e.clientX;
+      this.lastY = e.clientY;
+    });
+    const release = (e: PointerEvent) => {
+      if (e.pointerId !== this.dragId) return;
+      this.dragId = null;
+    };
+    canvas.addEventListener("pointerup", release);
+    canvas.addEventListener("pointercancel", release);
+    canvas.addEventListener("lostpointercapture", release);
   }
 
   private any(codes: string[]) {
@@ -63,6 +107,10 @@ export class Input {
     let actionPressed = this.pressed.has("KeyE") || this.pressed.has("Enter");
     let resetPressed = this.pressed.has("KeyR");
     const mutePressed = this.pressed.has("KeyM");
+    let pausePressed = this.pressed.has("Escape") || this.pressed.has("KeyP");
+    let menuUp = UP.some((c) => this.pressed.has(c));
+    let menuDown = DOWN.some((c) => this.pressed.has(c));
+    let confirmPressed = jumpPressed || actionPressed;
     let anyPressed = this.pressed.size > 0;
 
     const pad = navigator.getGamepads?.().find((p) => p && p.connected);
@@ -77,6 +125,10 @@ export class Input {
       jumpPressed ||= edge(0);
       actionPressed ||= edge(2) || edge(1);
       resetPressed ||= edge(3);
+      pausePressed ||= edge(9);
+      menuUp ||= edge(12);
+      menuDown ||= edge(13);
+      confirmPressed ||= edge(0);
       anyPressed ||= pad.buttons.some((_, i) => edge(i));
       this.padPrev = pad.buttons.map((x) => x.pressed);
     }
@@ -91,7 +143,15 @@ export class Input {
     s.mutePressed = mutePressed;
     s.mapPressed = this.pressed.has("Tab");
     s.closeMapPressed = this.pressed.has("Escape");
+    s.pausePressed = pausePressed;
+    s.menuUp = menuUp;
+    s.menuDown = menuDown;
+    s.confirmPressed = confirmPressed;
     s.anyPressed = anyPressed;
+    s.looking = this.dragId !== null;
+    s.lookDX = this.dragX;
+    s.lookDY = this.dragY;
+    this.dragX = this.dragY = 0;
     this.pressed.clear();
   }
 }

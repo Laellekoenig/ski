@@ -21,7 +21,9 @@ bun run build   # static build in dist/
 | `E` | board a lift at its bottom station |
 | `R` | back to the summit |
 | `Tab` | open / close the trail map (pauses skiing) |
-| `Esc` | close the trail map |
+| `Esc` | close the trail map if open; otherwise toggle the pause menu |
+| `P` | toggle the pause menu |
+| Mouse drag | look around; release to return to the follow camera |
 | `M` | mute |
 
 Gamepads work too: left stick steers, A jumps, X/B boards the lift, and the triggers tuck/brake.

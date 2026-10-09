@@ -60,7 +60,7 @@ export async function verifyMountain(game) {
       check(`${lift.def.name} can be boarded`, player.state === 'lift');
       player.rideS = lift.rideLength;
       player.update(1 / 120, input);
-      check(`${lift.def.name} returns to a safe top exit`, player.state === 'ski' && player.grounded && Number.isFinite(player.pos.y));
+      check(`${lift.def.name} returns to a safe top exit`, player.state === 'ski' && player.grounded && !lift.rideChair.visible && Number.isFinite(player.pos.y));
     }
     player.spawnAtSummit();
     check('Reset returns to the exact central summit', player.pos.x === 0 && player.pos.z === 0 && player.pos.y === 640 && player.speed === 0);

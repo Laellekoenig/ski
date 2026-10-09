@@ -4,9 +4,10 @@ import { World } from "./world";
 import { Particles } from "./particles";
 import { Trails } from "./trails";
 import { Player } from "./player";
-import { Input } from "./input";
+import { Input, type InputState } from "./input";
 import { Hud } from "./hud";
 import { Audio } from "./audio";
+import { PauseMenu } from "./pause";
 import { damp, lerp } from "./noise";
 
 const BEST_KEY = "a-short-ski.best";
@@ -35,6 +36,8 @@ const player = new Player(world, particles, trails);
 const input = new Input();
 const hud = new Hud(world);
 const audio = new Audio();
+const pause = new PauseMenu();
+let overlayChanged = false;
 
 let best = Number(localStorage.getItem(BEST_KEY) ?? 0) || 0;
 player.spawnAtSummit();
@@ -49,6 +52,37 @@ function endRun(distance: number) {
     hud.toast(`Run: ${Math.floor(distance).toLocaleString("en-US")} m`, "info");
   }
 }
+
+function resetRun() {
+  endRun(player.runDistance);
+  player.runDistance = 0;
+  player.spawnAtSummit();
+  snapCamera();
+}
+
+function syncOverlays() {
+  const paused = pause.open || hud.mapOpen;
+  document.body.classList.toggle("playing", started && !paused);
+  document.getElementById("hud")!.inert = paused;
+  audio.setPaused(paused);
+}
+
+hud.onMapChange = () => {
+  overlayChanged = true;
+  syncOverlays();
+};
+
+function setPaused(paused: boolean) {
+  pause.show(paused);
+  overlayChanged = true;
+  if (paused) hud.toggleMap(false);
+  syncOverlays();
+}
+
+pause.onChoose = (choice) => {
+  setPaused(false);
+  if (choice === "reset") resetRun();
+};
 
 player.events = {
   onJump: () => audio.jump(),
@@ -82,6 +116,51 @@ function snapCamera() {
   camLook.copy(player.pos).add(new THREE.Vector3(0, 1.2, 0));
 }
 snapCamera();
+
+// ---- drag-to-look: orbit the usual shot around the skier, easing back once released
+const LOOK_ELEV_MIN = -0.2;
+const LOOK_ELEV_MAX = 1.3;
+let lookYaw = 0;
+let lookPitch = 0;
+const viewPos = new THREE.Vector3();
+const viewLook = new THREE.Vector3();
+const lookFocus = new THREE.Vector3();
+const lookAxis = new THREE.Vector3();
+const lookQ = new THREE.Quaternion();
+const pitchQ = new THREE.Quaternion();
+const UP = new THREE.Vector3(0, 1, 0);
+
+function updateLook(dt: number, st: InputState) {
+  if (st.looking) {
+    const k = Math.PI / window.innerHeight;
+    lookYaw -= st.lookDX * k;
+    lookPitch += st.lookDY * k;
+  } else {
+    lookYaw = lerp(lookYaw, 0, damp(5, dt));
+    lookPitch = lerp(lookPitch, 0, damp(5, dt));
+    if (Math.abs(lookYaw) < 1e-4) lookYaw = 0;
+    if (Math.abs(lookPitch) < 1e-4) lookPitch = 0;
+  }
+  // keep the shortest way home after spinning around a few times
+  lookYaw = Math.atan2(Math.sin(lookYaw), Math.cos(lookYaw));
+}
+
+function applyLook() {
+  viewPos.copy(camPos);
+  viewLook.copy(camLook);
+  if (lookYaw === 0 && lookPitch === 0) return;
+  lookFocus.copy(player.pos).y += 1.2;
+  const offset = viewPos.sub(lookFocus);
+  const elev = Math.asin(offset.y / offset.length());
+  // store the clamped pitch so dragging past a limit doesn't wind up
+  lookPitch = Math.min(LOOK_ELEV_MAX, Math.max(LOOK_ELEV_MIN, elev + lookPitch)) - elev;
+  pitchQ.setFromAxisAngle(lookAxis.crossVectors(offset, UP).normalize(), lookPitch);
+  lookQ.setFromAxisAngle(UP, lookYaw).multiply(pitchQ);
+  viewPos.applyQuaternion(lookQ).add(lookFocus);
+  viewLook.sub(lookFocus).applyQuaternion(lookQ).add(lookFocus);
+  const ground = world.terrain.heightAt(viewPos.x, viewPos.z) + 1.2;
+  if (viewPos.y < ground) viewPos.y = ground;
+}
 
 const tmpV = new THREE.Vector3();
 function updateCamera(dt: number) {
@@ -136,8 +215,9 @@ function updateCamera(dt: number) {
     }
     camera.fov = lerp(camera.fov, 55 + Math.min(1, speed / 32) * 14, damp(2, dt));
   }
-  camera.position.copy(camPos);
-  camera.lookAt(camLook);
+  applyLook();
+  camera.position.copy(viewPos);
+  camera.lookAt(viewLook);
   camera.updateProjectionMatrix();
 }
 
@@ -147,6 +227,7 @@ function start() {
   started = true;
   hud.showTitle(false);
   audio.start();
+  syncOverlays();
 }
 
 window.addEventListener("resize", () => {
@@ -164,27 +245,43 @@ let acc = 0;
 let last = performance.now();
 let time = 0;
 
+function updateHud() {
+  let prompt = "";
+  if (player.state === "lift" && player.lift) prompt = `riding ${player.lift.def.name} · hold <kbd>Space</kbd> to hurry`;
+  else if (player.nearbyLift) prompt = `<kbd>E</kbd> ride the ${player.nearbyLift.def.name}`;
+  hud.update(player.runDistance, best, player.speed, started ? prompt : "", player.pos.x, player.pos.z, player.heading, player.surface);
+}
+
 function frame(now: number) {
   requestAnimationFrame(frame);
   const dt = Math.min(0.05, (now - last) / 1000);
   last = now;
-  time += dt;
 
   input.update();
   const st = input.state;
+  const wasPaused = pause.open || hud.mapOpen;
   if (!started && st.anyPressed) start();
+  else if (hud.mapOpen) {
+    // Escape belongs to the map while it is open; P / gamepad Start opens pause.
+    if (st.closeMapPressed || st.mapPressed) hud.toggleMap(false);
+    else if (st.pausePressed) setPaused(true);
+  } else if (started && st.pausePressed) setPaused(!pause.open);
+  else if (pause.open) pause.update(st);
+  else if (started && st.mapPressed) hud.toggleMap();
   if (st.mutePressed) audio.toggleMute();
 
-  if (started && st.mapPressed) hud.toggleMap();
-  if (st.closeMapPressed && hud.mapOpen) hud.toggleMap(false);
+  // Freeze both overlays, including their closing frame, so menu input never
+  // spills into jumping/boarding. Refresh the HUD to paint a newly opened map.
+  if (wasPaused || pause.open || hud.mapOpen || overlayChanged) {
+    overlayChanged = false;
+    updateHud();
+    renderer.render(world.scene, camera);
+    return;
+  }
+  time += dt;
 
-  if (started && !hud.mapOpen && !debug.pauseSimulation) {
-    if (st.resetPressed) {
-      endRun(player.runDistance);
-      player.runDistance = 0;
-      player.spawnAtSummit();
-      snapCamera();
-    }
+  if (started && !debug.pauseSimulation) {
+    if (st.resetPressed) resetRun();
     acc += dt;
     let first = true;
     while (acc >= STEP) {
@@ -202,13 +299,11 @@ function frame(now: number) {
 
   particles.update(dt);
   world.update(dt, time, player.pos, particles);
+  updateLook(dt, st);
   if (!debug.freezeCamera) updateCamera(dt);
 
-  let prompt = "";
-  if (player.state === "lift" && player.lift) prompt = `riding ${player.lift.def.name} · hold <kbd>Space</kbd> to hurry`;
-  else if (player.nearbyLift) prompt = `<kbd>E</kbd> ride the ${player.nearbyLift.def.name}`;
-  hud.update(player.runDistance, best, player.speed, started ? prompt : "", player.pos.x, player.pos.z, player.heading, player.surface);
-  audio.update(hud.mapOpen ? 0 : player.speed, player.skid, player.grounded, player.state === "lift");
+  updateHud();
+  audio.update(player.speed, player.skid, player.grounded, player.state === "lift");
 
   renderer.render(world.scene, camera);
 }
@@ -219,11 +314,13 @@ if (import.meta.env.DEV) {
   const sim = (seconds: number, keys: Partial<typeof input.state> = {}, sample?: () => void) => {
     started = true;
     hud.showTitle(false);
+    syncOverlays();
     const n = Math.round(seconds / STEP);
     for (let i = 0; i < n; i++) {
       player.update(STEP, { ...input.state, ...keys, jumpPressed: i === 0 && !!keys.jumpPressed, actionPressed: i === 0 && !!keys.actionPressed });
       particles.update(STEP);
       world.update(STEP, (time += STEP), player.pos, particles);
+      updateLook(STEP, { ...input.state, lookDX: 0, lookDY: 0 });
       updateCamera(STEP);
       sample?.();
     }
