@@ -53,7 +53,7 @@ export async function verifyMountain(game) {
     check('The lower limit stays halfway above the valley', Math.abs(t.heightAt(0, RUN_END) / t.heightAt(0, 0) - 0.5) < 0.01);
     player.spawnAtSummit();
     step(12);
-    check('Pushing off reaches the continuous descent', player.pos.z > 100 && player.speed > 10);
+    check('Pushing off reaches the continuous descent', player.pos.z > 60 && player.speed > 10);
     const speed = player.speed;
     step(3, { tuck: false, brake: true });
     check('Braking slows the skier', player.speed < speed * 0.5);
@@ -63,6 +63,27 @@ export async function verifyMountain(game) {
     check('Jump leaves the snow', !player.grounded && player.pos.y > t.heightAt(player.pos.x, player.pos.z) + 0.5);
     step(2);
     check('Jump lands safely', player.grounded && player.state === 'ski');
+    player.spawnAt(0, 250, 0);
+    step(8);
+    const jumpFrom = player.pos.clone();
+    step(0.01, { jumpPressed: true });
+    while (!player.grounded) step(0.01);
+    check('Jumps at speed stay short', Math.hypot(player.pos.x - jumpFrom.x, player.pos.z - jumpFrom.z) < 20);
+    player.spawnAt(0, 600, Math.PI);
+    const climbFrom = player.pos.y;
+    let climbed = 0;
+    for (let i = 0; i < 20 * 120; i++) {
+      step(1 / 120);
+      climbed = Math.max(climbed, player.pos.y - climbFrom);
+    }
+    check('Skating cannot climb the slope', climbed < 1);
+    player.spawnAtSummit();
+    let topSpeed = 0;
+    for (let i = 0; i < 60 * 30; i++) {
+      step(1 / 30, { steer: Math.sin(i / 30 * 2.2) > 0 ? 1 : -1 });
+      topSpeed = Math.max(topSpeed, player.speed);
+    }
+    check('Turning back and forth cannot pump up speed', topSpeed < 25);
     player.spawnAt(0, 250, 0);
     step(3);
     step(0.7, { steer: 0.6 });

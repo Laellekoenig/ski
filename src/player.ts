@@ -6,12 +6,23 @@ import type { Particles } from "./particles";
 import type { Trails } from "./trails";
 import { BOUNDS, RUN_END, SUMMIT } from "./layout";
 import type { Surface } from "./terrain";
-import { damp, lerp } from "./noise";
+import { damp, lerp, smoothstep } from "./noise";
 
 const G = 9.81;
 const MU = 0.08;
-const DRAG = 0.0095;
-const DRAG_TUCK = 0.0058;
+/** Quadratic air drag per metre (≈ ½ρC_dA/m), upright and tucked. */
+const DRAG = 0.011;
+const DRAG_TUCK = 0.0068;
+/** Share of the sideways kinetic energy an edge carves back into forward speed. */
+const CARVE_KEEP = 0.85;
+/** Skating: push strength from standstill, fading out by this speed. */
+const SKATE_ACC = 4.5;
+const SKATE_MAX = 9;
+/** Uphill grade (rise per metre travelled) at which skating stops helping. */
+const SKATE_MAX_GRADE = 0.07;
+/** Jump pop along the snow's normal, plus a little straight up. */
+const JUMP_POP = 3.4;
+const JUMP_LIFT = 0.8;
 /** Down the single snowfield, toward the Engadine backdrop. */
 export const START_HEADING = 0;
 
@@ -182,16 +193,18 @@ export class Player {
 
         let vf = this.vel.dot(this.fwd);
         let vl = this.vel.dot(this.lat);
-        // edges grip: sideways motion bleeds off, part of it is carved into forward speed
+        // edges grip: sideways motion bleeds off, part of its energy is carved into
+        // forward speed. Never more than was lost, so turning can't pump up speed.
         const grip = crashed ? 1.2 : brake ? 2.2 : 7.5;
         const newVl = vl * Math.exp(-grip * dt);
-        const lost = Math.abs(vl) - Math.abs(newVl);
+        if (!crashed && !brake) {
+          vf = Math.sign(vf || 1) * Math.sqrt(vf * vf + CARVE_KEEP * (vl * vl - newVl * newVl));
+        }
         vl = newVl;
-        if (!crashed && !brake) vf += Math.sign(vf || 1) * lost * 0.6;
         this.skid = Math.min(1, Math.abs(vl) / 4 + (brake ? Math.min(1, speed / 6) : 0));
 
         // friction & drag
-        const mu = (crashed ? 0.6 : MU) + (brake ? 0.45 : 0);
+        const mu = (crashed ? 0.6 : MU) + (brake ? 0.55 : 0);
         const fr = mu * G * n.y * dt;
         const sv = Math.hypot(vf, vl);
         if (sv > 1e-4) {
@@ -202,14 +215,19 @@ export class Player {
         const drag = (tuck ? DRAG_TUCK : DRAG);
         vf -= Math.sign(vf) * drag * vf * vf * dt;
 
-        // skating / pushing off when slow
-        this.skate = lerp(this.skate, tuck && vf < 10 ? 1 : 0, damp(6, dt));
-        if (tuck && vf < 10) vf += (vf < 0 ? 8 : 4.5) * dt;
+        // skating / pushing off: only gets you going on the flat, it can't beat
+        // gravity up a real slope or keep pushing once the skis are running
+        const skating = tuck && vf < SKATE_MAX;
+        this.skate = lerp(this.skate, skating ? 1 : 0, damp(6, dt));
+        if (skating) {
+          const flat = 1 - smoothstep(0, SKATE_MAX_GRADE, this.fwd.y);
+          vf += SKATE_ACC * flat * (1 - Math.max(0, vf) / SKATE_MAX) * dt;
+        }
 
         this.vel.copy(this.fwd).multiplyScalar(vf).addScaledVector(this.lat, vl);
 
         if (input.jumpPressed && !crashed) {
-          this.vel.addScaledVector(n, 3.2).y += 2.6;
+          this.vel.addScaledVector(n, JUMP_POP).y += JUMP_LIFT;
           this.grounded = false;
           this.airTime = 0;
           this.spin = 0;
@@ -221,7 +239,8 @@ export class Player {
       // airborne
       this.airTime += dt;
       this.vel.y -= G * dt;
-      this.vel.multiplyScalar(Math.exp(-0.02 * dt));
+      const airSpeed = this.vel.length();
+      this.vel.multiplyScalar(Math.max(0, 1 - (input.tuck ? DRAG_TUCK : DRAG) * airSpeed * dt));
       if (!crashed) {
         const spinRate = 6.5 * this.steer;
         this.heading -= spinRate * dt;
