@@ -35,7 +35,9 @@ Distance is counted during each run. The best distance is saved when finishing o
 
 The descent starts at a local elevation of 680 m (~2,486 m above sea level), and ends on a flat snowy shoulder at 340 m (~2,146 m above sea level). The valley is distant scenery and cannot be reached on skis. Press R for another run. The 1.4 km wide practice area uses one snow surface and a steady downhill grade with seeded, irregular rolls, shallow dips, and a gently crowned hill shape. The patterns repeat between runs so changes to the ski mechanics can be compared on the same terrain.
 
-The surrounding mountains and valley now come from **swisstopo’s real 3D terrain**, viewed from Corviglia (46.508484° N, 9.819294° E) toward bearing 145°. The 40 × 40 km background is sampled at 80 m spacing from 39 zoom-11 quantized-mesh tiles, revision 20250101. Geographic positions and relative heights are preserved in a local metre-based projection, without vertical exaggeration. Snow shading is artistic; buildings, vegetation and map imagery are omitted.
+The surrounding mountains and valley now come from **swisstopo’s real 3D terrain**, viewed from Corviglia (46.508484° N, 9.819294° E) toward bearing 145°. The 40 × 40 km background is sampled at 80 m spacing from 39 zoom-11 quantized-mesh tiles, revision 20250101. Geographic positions and relative heights are preserved in a local metre-based projection, without vertical exaggeration. Artistic winter shading exposes dark rock on steep upper faces and wind-scoured crests, leaving snow in gullies and gentle basins. Buildings, vegetation and map imagery are omitted.
+
+The rock and snow treatment draws on winter photographs from [Grialetsch](https://www.imageo.ch/Europa/Schweiz/Graubuenden/Grialetsch20070317_Grialetsch_d_10.html) and the [Mont Blanc massif](https://skitour.fr/sorties/177932). It is procedural, with no photo textures or changes to the surveyed geometry or skiable snow.
 
 The playable hillside has procedural snow rolls on top of a steady downhill grade, blending into the surveyed landscape outside the practice area. Its start and halfway runout stay flat. This is not a surveyed ski route. The terrain’s vertical origin is shifted to keep the existing local physics coordinates; published absolute elevations are approximate, and fine summit detail is reduced by resampling.
 
@@ -59,6 +61,7 @@ The importer caches downloads in the system temporary directory, decodes the sou
 
 - `src/layout.ts`: start, skiable limits, and halfway stopping point
 - `src/terrain.ts`: continuous snowfield, matching collision heights, and blending into the real landscape
+- `src/mountain-material.ts`: procedural exposed rock and broken snow edges on the distant mountains
 - `src/engadine.ts`, `src/data/`: bundled terrain loading and geographic elevation sampling
 - `src/world.ts`: winter sky with thin drifting clouds, atmospheric haze, and lighting
 - `src/weather.ts`: sparse, subtle diamond dust (the snow reflections live in `src/materials.ts`)
