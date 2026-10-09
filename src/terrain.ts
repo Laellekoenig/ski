@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import { createNoise2D, fbm, clamp, lerp, smoothstep, mulberry32 } from "./noise";
-import { snowNormalMap } from "./materials";
+import { addSnowGlints, snowNormalMap } from "./materials";
 import { ENGADINE, geographicHeight } from "./engadine";
 
 const X0 = -1760, Z0 = -400, CELL = 8;
@@ -184,13 +184,13 @@ export class Terrain {
     geo.setIndex(new THREE.BufferAttribute(idx, 1));
     geo.computeBoundingSphere();
 
-    const mat = new THREE.MeshStandardMaterial({
+    const mat = addSnowGlints(new THREE.MeshStandardMaterial({
       vertexColors: true,
       roughness: 0.92,
       metalness: 0,
       normalMap: snowNormalMap(),
       normalScale: new THREE.Vector2(0.45, 0.45),
-    });
+    }));
     const mesh = new THREE.Mesh(geo, mat);
     mesh.receiveShadow = true;
     return mesh;

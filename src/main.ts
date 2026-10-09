@@ -1,6 +1,7 @@
 import "./style.css";
 import * as THREE from "three";
 import { World } from "./world";
+import { Weather } from "./weather";
 import { Particles } from "./particles";
 import { Trails } from "./trails";
 import { Player } from "./player";
@@ -37,6 +38,7 @@ renderer.outputColorSpace = THREE.SRGBColorSpace;
 const camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 0.3, 60000);
 
 const world = new World(renderer);
+const weather = new Weather(world.scene);
 const particles = new Particles();
 world.scene.add(particles.mesh);
 const trails = new Trails(world.terrain);
@@ -347,9 +349,10 @@ function frame(now: number) {
   lineup.update(dt, camera, started ? player.pos : undefined);
 
   particles.update(dt);
-  world.update(player.pos);
+  world.update(player.pos, dt);
   if (started) updateLook(dt, st);
   if (!debug.freezeCamera) updateCamera(dt);
+  weather.update(dt, camera, renderer);
 
   updateHud();
   audio.update(player.speed, player.skid, player.grounded, false);
@@ -366,7 +369,7 @@ if (import.meta.env.DEV) {
     for (let i = 0; i < n; i++) {
       player.update(STEP, { ...input.state, ...keys, jumpPressed: i === 0 && !!keys.jumpPressed, actionPressed: i === 0 && !!keys.actionPressed });
       particles.update(STEP);
-      world.update(player.pos);
+      world.update(player.pos, STEP);
       updateLook(STEP, { ...input.state, lookDX: 0, lookDY: 0 });
       updateCamera(STEP);
       sample?.();
@@ -375,5 +378,5 @@ if (import.meta.env.DEV) {
     updateHud();
     renderer.render(world.scene, camera);
   };
-  Object.assign(window, { game: { player, world, camera, renderer, input, hud, lineup, sim, snapCamera, debug } });
+  Object.assign(window, { game: { player, world, weather, camera, renderer, input, hud, lineup, sim, snapCamera, debug } });
 }
