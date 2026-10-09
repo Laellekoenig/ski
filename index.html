@@ -40,25 +40,14 @@
     </section>
 
     <div id="title" aria-label="Choose your skier">
-      <div class="title-card">
-        <header class="title-header">
-          <div class="wordmark"><span class="swiss-mark" aria-hidden="true">✚</span>A Short Ski<span class="wordmark-dot">.</span></div>
-          <span class="club-label">THE ALPINE FRIENDS CLUB <span aria-hidden="true">✳</span></span>
-        </header>
-        <div class="selection-heading">
-          <p class="eyebrow">A LITTLE SWISS MOUNTAIN ADVENTURE</p>
-          <h1>Good slopes. <span>Great company.</span></h1>
-          <p class="tag">Five mountain friends. One lovely day in the snow.</p>
-        </div>
-        <div class="roster-heading"><h2>Pick your piste pal</h2><p>press <kbd>1</kbd> – <kbd>5</kbd> or click a friend</p></div>
-        <div class="character-roster" aria-label="Playable characters">
-          <div id="roster-track"></div>
-        </div>
+      <header class="title-top">
+        <div class="wordmark"><span class="swiss-mark" aria-hidden="true">✚</span>A Short Ski<span class="wordmark-dot">.</span></div>
+        <p class="title-prompt">Pick your piste pal · press <kbd>1</kbd> – <kbd>5</kbd></p>
+      </header>
+      <div id="lineup-labels" aria-label="Playable characters"></div>
+      <div class="title-panel">
         <p id="character-announcement" aria-live="polite" aria-atomic="true"></p>
-        <div class="start-row">
-          <button id="start-button" type="button">Let’s ski, Beni! <span aria-hidden="true">↗</span></button>
-          <span class="start-hint">or press <kbd>Enter</kbd><span>Same slopes. Your kind of company.</span></span>
-        </div>
+        <button id="start-button" type="button">Let’s ski, Beni! <kbd>Enter</kbd></button>
         <footer class="selection-footer">
           <span><kbd>A</kbd><kbd>D</kbd> steer</span>
           <span><kbd>W</kbd> tuck</span>
@@ -68,7 +57,6 @@
           <span><kbd>R</kbd> summit</span>
           <span><kbd>Tab</kbd> trail map</span>
           <span><kbd>Esc</kbd> pause</span>
-          <span>drag to look</span>
           <span><kbd>M</kbd> mute</span>
         </footer>
       </div>

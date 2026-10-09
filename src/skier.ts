@@ -21,6 +21,10 @@ export interface PoseInput {
   crashed: boolean;
   /** compress legs briefly, e.g. on landing or before jumping */
   squash: number;
+  /** 0..1, stepping on foot (skis off) */
+  walk?: number;
+  /** 0..1, waving the right arm */
+  wave?: number;
 }
 
 const THIGH = 0.27;
@@ -38,8 +42,30 @@ interface Leg {
   thigh: THREE.Mesh;
   shin: THREE.Mesh;
   knee: THREE.Mesh;
+  /** boot + binding cuff, and the ski itself */
   ski: THREE.Group;
+  board: THREE.Group;
 }
+
+/** One ski with its upturned tip and tail. Origin under the binding; points +z. */
+export function makeSki(color: number) {
+  const ski = new THREE.Group();
+  const board = mesh(new THREE.BoxGeometry(0.13, 0.035, 1.45), color, { bump: 0.25 });
+  board.position.set(0, 0.018, -0.05);
+  const tip = mesh(new THREE.BoxGeometry(0.13, 0.035, 0.28), color, { bump: 0.25 });
+  tip.position.set(0, 0.06, 0.76);
+  tip.rotation.x = -0.45;
+  const tail = mesh(new THREE.BoxGeometry(0.13, 0.035, 0.14), color, { bump: 0.25 });
+  tail.position.set(0, 0.03, -0.81);
+  tail.rotation.x = 0.25;
+  const stripe = mesh(new THREE.BoxGeometry(0.135, 0.038, 0.12), WHITE, { bump: 0.2 });
+  stripe.position.set(0, 0.02, 0.45);
+  ski.add(board, tip, tail, stripe);
+  return ski;
+}
+
+/** Feet sit this far apart when standing on skis. */
+export const SKI_GAP = 0.19;
 
 /** A round little skier made of clay. Origin between the feet; faces +z. */
 export class Skier {
@@ -72,6 +98,9 @@ export class Skier {
   private air = 0;
   private seat = 0;
   private flail = 0;
+  private walk = 0;
+  private walkPhase = 0;
+  private wave = 0;
   private pompomVel = new THREE.Vector2();
   private pompomOff = new THREE.Vector2();
 
@@ -89,23 +118,14 @@ export class Skier {
       const knee = mesh(new THREE.SphereGeometry(0.088, 10, 8), PANTS);
       this.lean.add(thigh, shin, knee);
       const ski = new THREE.Group();
-      const board = mesh(new THREE.BoxGeometry(0.13, 0.035, 1.45), SKI, { bump: 0.25 });
-      board.position.set(0, 0.018, -0.05);
-      const tip = mesh(new THREE.BoxGeometry(0.13, 0.035, 0.28), SKI, { bump: 0.25 });
-      tip.position.set(0, 0.06, 0.76);
-      tip.rotation.x = -0.45;
-      const tail = mesh(new THREE.BoxGeometry(0.13, 0.035, 0.14), SKI, { bump: 0.25 });
-      tail.position.set(0, 0.03, -0.81);
-      tail.rotation.x = 0.25;
-      const stripe = mesh(new THREE.BoxGeometry(0.135, 0.038, 0.12), WHITE, { bump: 0.2 });
-      stripe.position.set(0, 0.02, 0.45);
+      const board = makeSki(SKI);
       const boot = mesh(new THREE.BoxGeometry(0.15, 0.17, 0.27), BOOT);
       boot.position.set(0, 0.12, 0.0);
       const cuff = mesh(new THREE.CylinderGeometry(0.09, 0.095, 0.08, 10), HAT);
       cuff.position.set(0, 0.2, -0.01);
-      ski.add(board, tip, tail, stripe, boot, cuff);
+      ski.add(board, boot, cuff);
       this.lean.add(ski);
-      this.legs.push({ side, thigh, shin, knee, ski });
+      this.legs.push({ side, thigh, shin, knee, ski, board });
     }
 
     // ---- torso
@@ -213,6 +233,14 @@ export class Skier {
     }
   }
 
+  /** Skis on the feet, or left lying in the snow while walking around. */
+  get skis() {
+    return this.legs[0].board.visible;
+  }
+  set skis(on: boolean) {
+    for (const leg of this.legs) leg.board.visible = on;
+  }
+
   dispose() {
     this.root.traverse((part) => {
       if (part instanceof THREE.Mesh) part.geometry.dispose();
@@ -262,13 +290,17 @@ export class Skier {
     this.seat = lerp(this.seat, p.seated ? 1 : 0, k(6));
     this.flail = lerp(this.flail, p.crashed ? 1 : 0, k(10));
     if (p.skate > 0.05) this.skatePhase += dt * 6;
+    this.walk = lerp(this.walk, p.walk ?? 0, k(10));
+    this.wave = lerp(this.wave, p.wave ?? 0, k(8));
+    if (this.walk > 0.02) this.walkPhase += dt * 10;
 
     // --- body
     const hipStand = 0.6;
     this.hipY = hipStand - this.crouch * 0.2;
     const bob = Math.sin(t * 2.2) * 0.008 * (1 - speedN);
     const skate = Math.sin(this.skatePhase) * p.skate;
-    this.hips.position.set(skate * 0.06, this.hipY + bob + Math.abs(skate) * 0.03, -this.crouch * 0.08);
+    const stride = Math.sin(this.walkPhase) * this.walk;
+    this.hips.position.set(skate * 0.06, this.hipY + bob + Math.abs(skate) * 0.03 + Math.abs(stride) * 0.025, -this.crouch * 0.08);
     this.lean.rotation.z = this.leanAngle;
     this.torso.rotation.x = 0.1 + this.crouch * 0.55 - this.seat * 0.15;
     this.torso.rotation.z = skate * 0.1;
@@ -289,6 +321,11 @@ export class Skier {
         foot.z = lerp(foot.z, hip.z + 0.3 + swing, this.seat);
       }
       if (this.air > 0.01) foot.y += this.air * 0.08;
+      if (this.walk > 0.01) {
+        // alternate steps: one foot swings forward and lifts while the other plants
+        foot.z += s * stride * 0.16;
+        foot.y += Math.max(0, s * Math.cos(this.walkPhase)) * 0.07 * this.walk;
+      }
       this.solveLeg(leg, hip, foot);
       leg.ski.position.set(foot.x, foot.y - 0.18, foot.z);
       leg.ski.rotation.set(this.seat * -0.3 + this.air * -0.15, -s * this.plow * 0.28 + s * legSkate * 0.35, -this.leanAngle * 0.4);
@@ -317,6 +354,11 @@ export class Skier {
       out = lerp(out, 1.3, this.flail);
       // also lift the outside arm a little in turns
       out += Math.max(0, -s * p.turn) * 0.25 * speedN;
+      fwd -= s * stride * 0.45;
+      if (s > 0) {
+        fwd = lerp(fwd, 2.7, this.wave);
+        out = lerp(out, 0.35 + Math.sin(t * 9) * 0.35, this.wave);
+      }
       arm.rotation.x = lerp(arm.rotation.x, -fwd, k(10));
       arm.rotation.z = lerp(arm.rotation.z, s * out, k(10));
       // poles trail behind, roughly parallel to the slope

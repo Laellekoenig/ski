@@ -9,7 +9,7 @@ import { Hud } from "./hud";
 import { Audio } from "./audio";
 import { PauseMenu } from "./pause";
 import { damp, lerp } from "./noise";
-import { CharacterSelect } from "./character-select";
+import { Lineup } from "./lineup";
 
 const BEST_KEY = "a-short-ski.best";
 
@@ -42,6 +42,7 @@ let overlayChanged = false;
 
 let best = Number(localStorage.getItem(BEST_KEY) ?? 0) || 0;
 player.spawnAtSummit();
+player.visible = false;
 
 function endRun(distance: number) {
   if (distance > best && distance > 20) {
@@ -55,6 +56,7 @@ function endRun(distance: number) {
 }
 
 function resetRun() {
+  lineup.retire();
   endRun(player.runDistance);
   player.runDistance = 0;
   player.spawnAtSummit();
@@ -97,6 +99,7 @@ player.events = {
     hud.toast(label);
   },
   onBoard: (lift, dist) => {
+    lineup.retire();
     audio.board();
     endRun(dist);
     hud.toast(lift.def.name, "info");
@@ -108,8 +111,19 @@ player.events = {
 const camPos = new THREE.Vector3();
 const camLook = new THREE.Vector3();
 let camYaw = player.heading;
+/** the run is on: the chosen friend has landed on its skis */
 let started = false;
 let titleTime = 0;
+/** title shot around the lineup, then a sweep from it to the follow camera */
+const shotFocus = new THREE.Vector3();
+let shotDist = 0;
+const INTRO_TIME = 1.5;
+let introT = 1;
+let introAngle = 0;
+let introTurn = 0;
+let introRadius = 0;
+let introHeight = 0;
+const introLook = new THREE.Vector3();
 
 function snapCamera() {
   camYaw = player.heading;
@@ -167,12 +181,21 @@ const tmpV = new THREE.Vector3();
 function updateCamera(dt: number) {
   const p = player.pos;
   if (!started) {
-    // slow orbit around the skier for the title screen
+    // face the lineup from just downhill, swaying gently; close in on the chosen friend at the start
     titleTime += dt;
-    const a = player.heading + Math.PI + Math.sin(titleTime * 0.15) * 0.9;
-    camPos.set(p.x + Math.sin(a) * 9, p.y + 3.2, p.z + Math.cos(a) * 9);
-    camLook.copy(p).add(tmpV.set(Math.sin(player.heading) * 6, 1.6, Math.cos(player.heading) * 6));
     camera.fov = 50;
+    const halfH = Math.tan(THREE.MathUtils.degToRad(camera.fov / 2));
+    const fit = (lineup.halfWidth + 1) / (halfH * camera.aspect);
+    const wantDist = lineup.launching ? 5.2 : Math.max(6.5, fit);
+    if (!shotDist) {
+      shotDist = wantDist;
+      lineup.focus(shotFocus);
+    }
+    shotDist = lerp(shotDist, wantDist, damp(2.5, dt));
+    shotFocus.lerp(lineup.focus(tmpV), damp(3, dt));
+    const a = lineup.heading + Math.sin(titleTime * 0.25) * 0.14;
+    camPos.set(shotFocus.x + Math.sin(a) * shotDist, shotFocus.y + 1.2 + shotDist * 0.1, shotFocus.z + Math.cos(a) * shotDist);
+    camLook.copy(shotFocus).y += 0.6;
   } else if (player.state === "lift" && player.lift) {
     const l = player.lift;
     const want = tmpV.copy(p).addScaledVector(l.dir, -6).addScaledVector(l.right, 6.5);
@@ -217,32 +240,76 @@ function updateCamera(dt: number) {
     camera.fov = lerp(camera.fov, 55 + Math.min(1, speed / 32) * 14, damp(2, dt));
   }
   applyLook();
+  blendIntro(dt);
   camera.position.copy(viewPos);
   camera.lookAt(viewLook);
   camera.updateProjectionMatrix();
 }
 
+/** Sweep around the skier from the lineup shot to the follow camera, rising as it goes. */
+function blendIntro(dt: number) {
+  if (introT >= 1) return;
+  introT = Math.min(1, introT + dt / INTRO_TIME);
+  const e = introT * introT * (3 - 2 * introT);
+  const p = player.pos;
+  const ox = viewPos.x - p.x;
+  const oz = viewPos.z - p.z;
+  // keep turning the same way round, even as the target swings past straight behind
+  let turn = Math.atan2(Math.sin(Math.atan2(ox, oz) - introAngle), Math.cos(Math.atan2(ox, oz) - introAngle));
+  if (introTurn && Math.abs(turn - introTurn) > Math.PI) turn += Math.sign(introTurn - turn) * Math.PI * 2;
+  introTurn = turn || 1e-6;
+  const angle = introAngle + turn * e;
+  const radius = lerp(introRadius, Math.hypot(ox, oz), e);
+  viewPos.set(p.x + Math.sin(angle) * radius, p.y + lerp(introHeight, viewPos.y - p.y, e), p.z + Math.cos(angle) * radius);
+  viewPos.y = Math.max(viewPos.y, world.terrain.heightAt(viewPos.x, viewPos.z) + 1.2);
+  viewLook.lerpVectors(tmpV.copy(p).add(introLook), viewLook, e);
+}
+
 // ---- start / resize
-function start() {
+const lineup = new Lineup(world, particles, {
+  onSelect: (character) => {
+    hud.setCharacter(character);
+    document.getElementById("title")!.style.setProperty("--selected-color", character.color);
+    document.getElementById("character-announcement")!.innerHTML = `<strong>${character.name}</strong><span>${character.species}</span><em>“${character.motto}”</em>`;
+    document.getElementById("start-button")!.innerHTML = `Let’s ski, ${character.name}! <kbd>Enter</kbd>`;
+  },
+  onHop: () => audio.jump(),
+  onLand: (skier, at, heading) => {
+    audio.land(4);
+    player.adoptSkier(skier, 0.45);
+    player.spawnAt(at.x, at.z, heading);
+    player.visible = true;
+    // remember the lineup shot relative to the skier, then hand over to the follow camera
+    introAngle = Math.atan2(camera.position.x - at.x, camera.position.z - at.z);
+    introRadius = Math.hypot(camera.position.x - at.x, camera.position.z - at.z);
+    introHeight = camera.position.y - player.pos.y;
+    introLook.copy(viewLook).sub(player.pos);
+    introTurn = 0;
+    introT = 0;
+    snapCamera();
+    started = true;
+    syncOverlays();
+  },
+});
+document.getElementById("start-button")!.addEventListener("click", () => start());
+
+/** Enter on the title: the chosen friend hops onto its skis, and the run begins on landing. */
+function start(instant = false) {
   if (started) return;
-  started = true;
-  player.skier.root.visible = true;
-  hud.showTitle(false);
-  audio.start();
-  // Let the title fade before releasing the preview models and WebGL context.
-  setTimeout(() => characterSelect.dispose(), 550);
-  syncOverlays();
+  if (!lineup.launching) {
+    hud.showTitle(false);
+    audio.start();
+  }
+  if (instant) {
+    lineup.finishLaunch();
+    introT = 1;
+  } else lineup.launch();
 }
 
 window.addEventListener("resize", () => {
   camera.aspect = window.innerWidth / window.innerHeight;
   renderer.setSize(window.innerWidth, window.innerHeight);
 });
-
-const characterSelect = new CharacterSelect((character) => {
-  player.selectCharacter(character);
-  hud.setCharacter(character);
-}, start);
 
 document.getElementById("loading")!.style.opacity = "0";
 setTimeout(() => document.getElementById("loading")?.remove(), 700);
@@ -270,8 +337,8 @@ function frame(now: number) {
   const st = input.state;
   const wasPaused = pause.open || hud.mapOpen;
   if (!started) {
-    if (st.characterPressed >= 0) characterSelect.select(st.characterPressed);
-    if (st.characterStep) characterSelect.step(st.characterStep);
+    if (st.characterPressed >= 0) lineup.select(st.characterPressed);
+    if (st.characterStep) lineup.step(st.characterStep);
     if (st.startPressed) start();
     // Confirming the choice must not also jump or board a lift.
     st.jumpPressed = st.actionPressed = false;
@@ -307,28 +374,27 @@ function frame(now: number) {
         first = false;
       }
     }
-  } else if (!started) {
-    player.idle(dt, { ...st, steer: 0, tuck: false, brake: false });
   }
+  // the friends left behind cheer the run off, then leave the summit once it is out of sight
+  if (started && player.pos.distanceTo(lineup.center) > 120) lineup.retire();
+  lineup.update(dt, camera, started ? player.pos : undefined);
 
   particles.update(dt);
   world.update(dt, time, player.pos, particles);
-  updateLook(dt, st);
+  if (started) updateLook(dt, st);
   if (!debug.freezeCamera) updateCamera(dt);
 
   updateHud();
   audio.update(player.speed, player.skid, player.grounded, player.state === "lift");
 
-  player.skier.root.visible = started;
   renderer.render(world.scene, camera);
-  if (!started) characterSelect.update(dt);
 }
 requestAnimationFrame(frame);
 
 if (import.meta.env.DEV) {
   // test helper: run the simulation headlessly for `seconds` with fixed inputs, then render one frame
   const sim = (seconds: number, keys: Partial<typeof input.state> = {}, sample?: () => void) => {
-    start();
+    start(true);
     const n = Math.round(seconds / STEP);
     for (let i = 0; i < n; i++) {
       player.update(STEP, { ...input.state, ...keys, jumpPressed: i === 0 && !!keys.jumpPressed, actionPressed: i === 0 && !!keys.actionPressed });
@@ -340,5 +406,5 @@ if (import.meta.env.DEV) {
     }
     renderer.render(world.scene, camera);
   };
-  Object.assign(window, { game: { player, world, camera, renderer, input, hud, sim, snapCamera, debug } });
+  Object.assign(window, { game: { player, world, camera, renderer, input, hud, lineup, sim, snapCamera, debug } });
 }
