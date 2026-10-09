@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import { mulberry32 } from "./noise";
 
-type Finish = "fabric" | "plastic" | "rubber" | "metal";
+type Finish = "fabric" | "plastic" | "rubber" | "metal" | "skin" | "hair";
 const materials = new Map<string, THREE.MeshStandardMaterial>();
 let fabricMap: THREE.CanvasTexture | undefined;
 
@@ -39,7 +39,7 @@ export function gearMaterial(color: number, finish: Finish = "fabric") {
     material = new THREE.MeshStandardMaterial({
       color,
       map: finish === "fabric" ? fabricTexture() : null,
-      roughness: { fabric: 0.91, plastic: 0.36, rubber: 0.95, metal: 0.28 }[finish],
+      roughness: { fabric: 0.91, plastic: 0.36, rubber: 0.95, metal: 0.28, skin: 0.62, hair: 0.55 }[finish],
       metalness: finish === "metal" ? 0.75 : 0,
     });
     materials.set(key, material);
@@ -47,8 +47,23 @@ export function gearMaterial(color: number, finish: Finish = "fabric") {
   return material;
 }
 
-export function gearMesh(geometry: THREE.BufferGeometry, color: number, finish: Finish = "fabric") {
-  const part = new THREE.Mesh(geometry, gearMaterial(color, finish));
+/** Printed fabric: a pattern painted onto a canvas, with the shared weave pressed into it. */
+export function printedMaterial(draw: (ctx: CanvasRenderingContext2D, width: number, height: number) => void, width = 256, height = 256) {
+  const canvas = document.createElement("canvas");
+  canvas.width = width; canvas.height = height;
+  const ctx = canvas.getContext("2d")!;
+  draw(ctx, width, height);
+  ctx.globalCompositeOperation = "multiply";
+  ctx.fillStyle = ctx.createPattern(fabricTexture().image as HTMLCanvasElement, "repeat")!;
+  ctx.fillRect(0, 0, width, height);
+  const map = new THREE.CanvasTexture(canvas);
+  map.colorSpace = THREE.SRGBColorSpace;
+  map.anisotropy = 4;
+  return new THREE.MeshStandardMaterial({ map, roughness: 0.88 });
+}
+
+export function gearMesh(geometry: THREE.BufferGeometry, color: number | THREE.Material, finish: Finish = "fabric") {
+  const part = new THREE.Mesh(geometry, typeof color === "number" ? gearMaterial(color, finish) : color);
   part.castShadow = part.receiveShadow = true;
   return part;
 }
@@ -60,32 +75,84 @@ export function box(parent: THREE.Object3D, color: number, size: [number, number
   return part;
 }
 
-/** Octagonal sections create shoulders, a waist and a hem instead of a pill-shaped body. */
-export function shellGeometry(rings: { y: number; width: number; depth: number }[]) {
-  const section = [[-0.72, 1], [0.72, 1], [1, 0.55], [1, -0.55], [0.72, -1], [-0.72, -1], [-1, -0.55], [-1, 0.55]];
-  const positions: number[] = [];
-  const uv: number[] = [];
-  const indices: number[] = [];
+/** Smooth, slightly squared sections, like a lathed console-era body. +z (u = 0.5) is the front. */
+export function loftGeometry(rings: { y: number; width: number; depth: number; z?: number }[], segments = 18, squareness = 2.6) {
+  const positions: number[] = [], uv: number[] = [], indices: number[] = [];
+  const bottom = rings[0].y, top = rings[rings.length - 1].y;
+  const row = segments + 1;
+  const curve = (v: number) => Math.sign(v) * Math.abs(v) ** (2 / squareness);
   rings.forEach((ring, r) => {
-    for (let i = 0; i <= 8; i++) {
-      const [x, z] = section[i % 8];
-      positions.push(x * ring.width / 2, ring.y, z * ring.depth / 2);
-      uv.push(i / 8, r / (rings.length - 1));
-      if (r < rings.length - 1 && i < 8) {
-        const a = r * 9 + i, b = a + 9;
+    for (let i = 0; i <= segments; i++) {
+      const angle = (i / segments - 0.5) * Math.PI * 2;
+      positions.push(curve(Math.sin(angle)) * ring.width / 2, ring.y, (ring.z ?? 0) + curve(Math.cos(angle)) * ring.depth / 2);
+      uv.push(i / segments, (ring.y - bottom) / (top - bottom));
+      if (r < rings.length - 1 && i < segments) {
+        const a = r * row + i, b = a + row;
         indices.push(a, a + 1, b, b, a + 1, b + 1);
       }
     }
   });
-  for (let i = 1; i < 7; i++) {
-    indices.push(0, i + 1, i);
-    const top = (rings.length - 1) * 9;
-    indices.push(top, top + i, top + i + 1);
+  // A flat cap closes the hem; a shallow dome closes the neck.
+  for (const [r, cap] of [[0, -1], [rings.length - 1, 1]] as const) {
+    const ring = rings[r];
+    const pole = positions.length / 3;
+    positions.push(0, ring.y + Math.max(0, cap) * Math.min(ring.width, ring.depth) * 0.12, ring.z ?? 0);
+    uv.push(0.5, cap > 0 ? 1 : 0);
+    for (let i = 0; i < segments; i++) {
+      const a = r * row + i;
+      if (cap > 0) indices.push(a, a + 1, pole);
+      else indices.push(a + 1, a, pole);
+    }
   }
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
   geometry.setAttribute("uv", new THREE.Float32BufferAttribute(uv, 2));
   geometry.setIndex(indices);
+  geometry.computeVertexNormals();
+  // The texture seam runs down the back; blend its normals so it does not crease.
+  const normal = geometry.getAttribute("normal") as THREE.BufferAttribute;
+  for (let r = 0; r < rings.length; r++) {
+    const a = r * row, b = a + segments;
+    const n = new THREE.Vector3().fromBufferAttribute(normal, a).add(new THREE.Vector3().fromBufferAttribute(normal, b)).normalize();
+    normal.setXYZ(a, n.x, n.y, n.z); normal.setXYZ(b, n.x, n.y, n.z);
+  }
+  return geometry;
+}
+
+/**
+ * A tapered, rounded limb along y, centred on its joints, with `radii` spaced evenly from the lower joint
+ * to the upper one. Rounded ends overlap the neighbouring joints; an open hem flares over a boot or glove.
+ */
+export function limbGeometry(length: number, radii: number[], { hem = 0, segments = 12 } = {}) {
+  const points: THREE.Vector2[] = [];
+  const low = radii[0], high = radii[radii.length - 1];
+  if (hem) {
+    points.push(new THREE.Vector2(0, -length / 2 - hem + 0.01), new THREE.Vector2(low * 0.92, -length / 2 - hem + 0.005), new THREE.Vector2(low, -length / 2 - hem));
+  } else {
+    for (let i = 0; i < 4; i++) {
+      const a = -Math.PI / 2 + (i / 4) * Math.PI / 2;
+      points.push(new THREE.Vector2(Math.cos(a) * low, -length / 2 + Math.sin(a) * low));
+    }
+  }
+  radii.forEach((r, i) => points.push(new THREE.Vector2(r, -length / 2 + (i / (radii.length - 1)) * length)));
+  for (let i = 1; i <= 4; i++) {
+    const a = (i / 4) * Math.PI / 2;
+    points.push(new THREE.Vector2(Math.max(Math.cos(a) * high, 0), length / 2 + Math.sin(a) * high));
+  }
+  return new THREE.LatheGeometry(points, segments);
+}
+
+/** A lumpy ball of fleece or faux fur; displacement is keyed on position so shared corners stay closed. */
+export function fuzzGeometry(radius: number, seed = 1, detail = 2) {
+  const geometry = new THREE.IcosahedronGeometry(radius, detail);
+  const position = geometry.getAttribute("position") as THREE.BufferAttribute;
+  const p = new THREE.Vector3();
+  for (let i = 0; i < position.count; i++) {
+    p.fromBufferAttribute(position, i);
+    const h = Math.sin(p.x * 431.7 + p.y * 911.3 + p.z * 263.9 + seed * 17.1) * 43758.5453;
+    p.multiplyScalar(0.86 + (h - Math.floor(h)) * 0.3);
+    position.setXYZ(i, p.x, p.y, p.z);
+  }
   geometry.computeVertexNormals();
   return geometry;
 }
