@@ -60,9 +60,14 @@ function resetRun() {
   snapCamera();
 }
 
+function syncCursor() {
+  document.body.classList.toggle("playing", started && !pause.open);
+}
+
 function setPaused(paused: boolean) {
   pause.show(paused);
   audio.setPaused(paused);
+  syncCursor();
 }
 
 pause.onChoose = (choice) => {
@@ -205,6 +210,7 @@ function start() {
   started = true;
   hud.showTitle(false);
   audio.start();
+  syncCursor();
 }
 
 window.addEventListener("resize", () => {
