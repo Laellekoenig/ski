@@ -30,6 +30,8 @@ Meet Beni the Alpine ibex, Mila the Alpine marmot, Lumi the mountain hare, Fynn 
 | Mouse drag | look around; release to return to the follow camera |
 | `M` | mute |
 
+Add `?silent` to the URL (e.g. `http://localhost:5173/?silent`) to disable audio entirely, which is handy when testing. Automated browsers (`navigator.webdriver`) are always silent.
+
 Gamepads work too: left stick steers, A jumps, X/B boards the lift, and the triggers tuck/brake.
 
 **Score:** distance skied since your last lift ride. Your best run is saved in `localStorage`.
