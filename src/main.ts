@@ -249,9 +249,7 @@ function blendIntro(dt: number) {
 // ---- start / resize
 const lineup = new Lineup(world, particles, {
   onSelect: (character) => {
-    document.getElementById("title")!.style.setProperty("--selected-color", character.color);
-    document.getElementById("character-announcement")!.innerHTML = `<strong>${character.name}</strong><span>${character.species}</span><em>“${character.motto}”</em>`;
-    document.getElementById("start-button")!.innerHTML = `Let’s ski, ${character.name}! <kbd>Enter</kbd>`;
+    document.getElementById("character-announcement")!.textContent = `${character.name}, ${character.species}`;
   },
   onHop: () => audio.jump(),
   onLand: (skier, at, heading) => {

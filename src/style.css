@@ -1,10 +1,12 @@
-@import "@fontsource/fredoka/400.css";
-@import "@fontsource/fredoka/600.css";
+@import "@fontsource/inter/400.css";
+@import "@fontsource/inter/500.css";
+@import "@fontsource/inter/600.css";
 
 :root {
-  --ink: #2b2f45;
-  --red: #e8423f;
-  --card: rgba(255, 255, 255, 0.86);
+  --ink: #111;
+  --paper: #fff;
+  --muted: rgba(17, 17, 17, 0.5);
+  --line: rgba(17, 17, 17, 0.12);
 }
 
 * {
@@ -17,9 +19,12 @@ body {
   height: 100%;
   overflow: hidden;
   background: #cfe4f7;
-  font-family: "Fredoka", ui-rounded, system-ui, sans-serif;
+  font-family: "Inter", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  font-feature-settings: "tnum", "ss01";
+  letter-spacing: -0.01em;
   color: var(--ink);
   user-select: none;
+  -webkit-font-smoothing: antialiased;
 }
 
 /* hide the cursor only while actually skiing; title + pause menu keep it */
@@ -41,6 +46,41 @@ body.playing {
   pointer-events: none;
 }
 
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+button:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 3px;
+}
+
+kbd {
+  display: inline-block;
+  min-width: 1.6em;
+  padding: 1px 5px;
+  border: 1px solid currentColor;
+  border-radius: 3px;
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.4;
+  text-align: center;
+  opacity: 0.6;
+}
+
+/* ---- in-run HUD */
+
 #hud {
   position: fixed;
   inset: 0;
@@ -50,103 +90,111 @@ body.playing {
 
 .distance {
   position: absolute;
-  top: 20px;
-  left: 24px;
-  font-size: 40px;
-  font-weight: 600;
-  color: #fff;
-  -webkit-text-stroke: 2px var(--ink);
-  paint-order: stroke fill;
-  text-shadow: 0 4px 0 rgba(43, 47, 69, 0.3);
+  top: 28px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  color: var(--ink);
+  font-size: 44px;
+  font-weight: 500;
+  letter-spacing: -0.03em;
+  line-height: 1;
+}
+.distance .unit {
+  font-size: 18px;
+  font-weight: 400;
+  letter-spacing: 0;
+  opacity: 0.6;
 }
 
-kbd {
-  display: inline-block;
-  min-width: 1.7em;
-  padding: 2px 8px;
-  margin: 0 2px;
-  border-radius: 8px;
-  background: var(--ink);
-  color: #fff;
-  font-family: inherit;
-  font-weight: 600;
-  font-size: 0.85em;
-  text-align: center;
-  box-shadow: 0 3px 0 rgba(0, 0, 0, 0.3);
+#run-end {
+  position: absolute;
+  left: 50%;
+  bottom: 48px;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  background: var(--paper);
+  font-size: 14px;
+  font-weight: 500;
 }
+#run-end[hidden] {
+  display: none;
+}
+
+/* ---- title / character pick */
 
 #title {
-  --selected-color: #168c87;
   position: fixed;
   inset: 0;
   pointer-events: none;
   transition: opacity 0.5s;
-  /* soft vignettes keep the text legible over the live scene */
-  background:
-    linear-gradient(180deg, rgba(236, 246, 250, 0.82), rgba(236, 246, 250, 0) 22%),
-    linear-gradient(0deg, rgba(236, 246, 250, 0.88), rgba(236, 246, 250, 0) 30%);
 }
-#title button { pointer-events: auto; }
-#title kbd { background: #fdfefb; color: #53686a; box-shadow: 0 2px 0 #d1dedc; border: 1px solid #dbe5e1; border-radius: 6px; min-width: 1.65em; padding: 2px 6px; }
-#lineup-labels { position: absolute; inset: 0; }
+#title button {
+  pointer-events: auto;
+}
+#lineup-labels {
+  position: absolute;
+  inset: 0;
+}
 .lineup-label {
   position: absolute;
   left: 0;
   top: 0;
   display: flex;
   align-items: center;
-  gap: 7px;
-  padding: 5px 12px 5px 6px;
-  border: 2px solid transparent;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.82);
-  color: #344f50;
-  font: 600 16px "Fredoka", sans-serif;
+  gap: 8px;
+  padding: 6px 10px;
+  border: 0;
+  background: rgba(255, 255, 255, 0.9);
+  font-size: 13px;
+  font-weight: 500;
   white-space: nowrap;
-  box-shadow: 0 4px 0 rgba(43, 47, 69, 0.1);
-  transition: background 0.2s, color 0.2s, border-color 0.2s, transform 0.25s cubic-bezier(0.3, 1.6, 0.5, 1);
   transform: translate(-50%, -100%);
-  transform-origin: 50% 100%;
-  -webkit-tap-highlight-color: transparent;
+  transition: background 0.15s, color 0.15s;
 }
-.lineup-label:hover { border-color: var(--character-color); }
-#title .lineup-label kbd { min-width: 1.5em; padding: 0 5px; }
-.lineup-label[aria-pressed="true"] { background: var(--character-color); border-color: var(--character-color); color: #fffdf3; transform: translate(-50%, -100%) scale(1.12); box-shadow: 0 4px 0 color-mix(in srgb, var(--character-color) 60%, #243e40); }
-#title .lineup-label[aria-pressed="true"] kbd { color: var(--character-color); }
-.lineup-label:focus-visible, #start-button:focus-visible { outline: 3px solid #354f66; outline-offset: 4px; }
-.title-panel { position: absolute; left: 50%; bottom: 40px; transform: translateX(-50%); width: min(760px, calc(100% - 36px)); display: flex; flex-direction: column; align-items: center; gap: 14px; }
-#character-announcement { display: flex; align-items: baseline; justify-content: center; flex-wrap: wrap; gap: 4px 10px; margin: 0; text-align: center; font-size: 15px; color: #5f7471; }
-#character-announcement strong { font-size: 26px; font-weight: 600; color: var(--selected-color); }
-#character-announcement span { font-size: 14px; opacity: 0.8; }
-#character-announcement em { flex-basis: 100%; font-style: normal; }
-#start-button { display: flex; align-items: center; gap: 14px; padding: 13px 18px 13px 26px; border: 0; border-radius: 17px; background: var(--selected-color); color: #fffdf3; box-shadow: 0 5px 0 color-mix(in srgb, var(--selected-color) 75%, #243e40); font: 600 21px "Fredoka", sans-serif; transition: background 0.2s, transform 0.15s; }
-#start-button:hover { transform: translateY(-2px); }
-#start-button:active { transform: translateY(3px); }
-#title #start-button kbd { font-size: 13px; color: var(--selected-color); }
-
-@media (max-width: 760px) {
-  .lineup-label { font-size: 13px; padding: 3px 9px 3px 4px; gap: 4px; }
-  .lineup-label span { display: none; }
-  .lineup-label[aria-pressed="true"] span { display: inline; }
+.lineup-label .key {
+  color: var(--muted);
+  font-size: 11px;
 }
-@media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after { transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; }
+.lineup-label:hover {
+  background: #fff;
+}
+.lineup-label[aria-pressed="true"] {
+  background: var(--ink);
+  color: var(--paper);
+}
+.lineup-label[aria-pressed="true"] .key {
+  color: rgba(255, 255, 255, 0.55);
 }
 
-#loading {
-  position: fixed;
-  inset: 0;
+.title-panel {
+  position: absolute;
+  left: 50%;
+  bottom: 48px;
+  transform: translateX(-50%);
+}
+#start-button {
   display: flex;
   align-items: center;
-  justify-content: center;
-  font-size: 26px;
-  font-weight: 600;
-  background: #cfe4f7;
-  transition: opacity 0.6s;
+  gap: 14px;
+  padding: 14px 18px 14px 22px;
+  border: 0;
+  background: var(--ink);
+  color: var(--paper);
+  font-size: 15px;
+  font-weight: 500;
+  transition: background 0.15s;
+}
+#start-button:hover {
+  background: #333;
 }
 
-button { font-family: inherit; color: inherit; cursor: pointer; }
-button:focus-visible { outline: 3px solid #ed9d43; outline-offset: 4px; }
+/* ---- pause */
 
 #pause {
   position: fixed;
@@ -154,69 +202,60 @@ button:focus-visible { outline: 3px solid #ed9d43; outline-offset: 4px; }
   display: flex;
   align-items: center;
   justify-content: center;
+  background: rgba(255, 255, 255, 0.35);
+  backdrop-filter: blur(6px);
   transition: opacity 0.2s;
-  background: rgba(43, 47, 69, 0.28);
-  backdrop-filter: blur(3px);
 }
 .pause-card {
   display: flex;
   flex-direction: column;
-  align-items: stretch;
-  gap: 12px;
-  min-width: 280px;
-  text-align: center;
-  background: var(--card);
-  padding: 24px 34px 20px;
-  border-radius: 32px;
-  box-shadow:
-    0 10px 0 rgba(43, 47, 69, 0.15),
-    0 20px 60px rgba(43, 47, 69, 0.2);
-  transition: transform 0.25s cubic-bezier(0.3, 1.6, 0.5, 1);
-}
-#pause.hidden .pause-card {
-  transform: scale(0.9);
+  min-width: 240px;
+  padding: 20px 0 8px;
+  background: var(--paper);
 }
 .pause-card h2 {
-  margin: 0 0 6px;
-  font-size: 44px;
-  font-weight: 600;
-  color: var(--red);
-  -webkit-text-stroke: 2px #fff;
-  paint-order: stroke fill;
+  margin: 0 20px 12px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
 .pause-card button {
-  font: inherit;
-  font-size: 22px;
-  font-weight: 600;
-  color: var(--ink);
-  background: #fff;
-  border: none;
-  border-radius: 999px;
-  padding: 10px 24px;
-  cursor: pointer;
-  box-shadow: 0 5px 0 rgba(43, 47, 69, 0.15);
-  transition:
-    transform 0.15s cubic-bezier(0.3, 1.6, 0.5, 1),
-    background 0.15s,
-    color 0.15s;
+  padding: 12px 20px;
+  border: 0;
+  border-top: 1px solid var(--line);
+  background: none;
+  text-align: left;
+  font-size: 16px;
+  font-weight: 500;
 }
 .pause-card button.selected {
-  background: var(--red);
-  color: #fff;
-  transform: scale(1.05);
-  box-shadow: 0 5px 0 rgba(150, 35, 33, 0.45);
-}
-.pause-card button:active {
-  transform: translateY(3px) scale(1.02);
-  box-shadow: 0 2px 0 rgba(150, 35, 33, 0.45);
-}
-.pause-card .hint {
-  margin: 4px 0 0;
-  font-size: 15px;
-  opacity: 0.65;
+  background: var(--ink);
+  color: var(--paper);
 }
 
-#run-end { position: absolute; left: 50%; bottom: 70px; transform: translateX(-50%); display: flex; flex-direction: column; gap: 10px; align-items: center; background: rgba(250, 253, 255, 0.9); padding: 24px 32px; border-radius: 20px; color: #425d74; }
-#run-end[hidden] { display: none; }
-#run-end strong { font-size: 24px; font-weight: 600; }
-#run-end span { font-size: 14px; }
+/* ---- loading */
+
+#loading {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #cfe4f7;
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  transition: opacity 0.6s;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+  }
+}

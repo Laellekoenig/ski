@@ -97,10 +97,9 @@ export class Lineup {
       const label = document.createElement("button");
       label.type = "button";
       label.className = "lineup-label";
-      label.style.setProperty("--character-color", character.color);
       label.setAttribute("aria-label", `${index + 1}. ${character.name}, ${character.species}`);
       label.setAttribute("aria-keyshortcuts", String(index + 1));
-      label.innerHTML = `<kbd>${index + 1}</kbd><span>${character.name}</span>`;
+      label.innerHTML = `<span class="key">${index + 1}</span><span>${character.name}</span>`;
       label.addEventListener("click", () => this.select(index));
       this.labels.appendChild(label);
 
