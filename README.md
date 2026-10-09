@@ -63,7 +63,8 @@ The importer caches downloads in the system temporary directory, decodes the sou
 - `src/terrain.ts`: continuous snowfield, matching collision heights, and blending into the real landscape
 - `src/mountain-material.ts`: procedural exposed rock and broken snow edges on the distant mountains
 - `src/engadine.ts`, `src/data/`: bundled terrain loading and geographic elevation sampling
-- `src/world.ts`: clear sky and lighting
+- `src/world.ts`: winter sky with thin drifting clouds, atmospheric haze, and lighting
+- `src/weather.ts`: sparse, subtle diamond dust (the snow reflections live in `src/materials.ts`)
 - `src/player.ts`: carving, braking, jumps, landings, and run completion
 - `src/skier.ts`, `src/characters.ts`, `src/animals.ts`: the five clay skiers
 - `src/lineup.ts`: character selection and the transition onto skis

@@ -1,58 +1,80 @@
 import * as THREE from "three";
-import { damp, lerp, mulberry32, smoothstep } from "./noise";
+import { mulberry32 } from "./noise";
+import { SUN_DIR } from "./world";
 
-/** A permanent weather pocket on the northeast face, with a gradual boundary. */
-export function stormAt(x: number, z: number) {
-  return smoothstep(190, 450, Math.hypot(x, z)) * smoothstep(-100, 150, x) * smoothstep(-60, 220, -z);
-}
+const COUNT = 850;
+/** side of the box of air that follows the camera, in metres */
+const RANGE = 40;
 
+/** Sparse diamond dust, visible as small, brief reflections in cold sunshine. */
 export class Weather {
-  readonly snow: THREE.Points;
-  intensity = 0;
-  private seeds = new Float32Array(1600 * 3);
-  private positions = new Float32Array(1600 * 3);
-  private material: THREE.PointsMaterial;
-  private clearColor = new THREE.Color(0xd6e8f8);
-  private stormColor = new THREE.Color(0xa8bdce);
+  readonly sparkles: THREE.Points;
+  private material: THREE.ShaderMaterial;
+  private size = new THREE.Vector2();
 
   constructor(scene: THREE.Scene) {
     const random = mulberry32(419);
-    for (let i = 0; i < this.seeds.length; i++) this.seeds[i] = random();
+    const seeds = new Float32Array(COUNT * 3);
+    const phases = new Float32Array(COUNT);
+    for (let i = 0; i < seeds.length; i++) seeds[i] = random() * RANGE;
+    for (let i = 0; i < COUNT; i++) phases[i] = random();
     const geometry = new THREE.BufferGeometry();
-    geometry.setAttribute("position", new THREE.BufferAttribute(this.positions, 3).setUsage(THREE.DynamicDrawUsage));
-    const canvas = document.createElement("canvas");
-    canvas.width = canvas.height = 32;
-    const ctx = canvas.getContext("2d")!;
-    const gradient = ctx.createRadialGradient(16, 16, 1, 16, 16, 15);
-    gradient.addColorStop(0, "white");
-    gradient.addColorStop(0.5, "rgba(255,255,255,0.85)");
-    gradient.addColorStop(1, "rgba(255,255,255,0)");
-    ctx.fillStyle = gradient;
-    ctx.fillRect(0, 0, 32, 32);
-    this.material = new THREE.PointsMaterial({ color: 0xffffff, map: new THREE.CanvasTexture(canvas), size: 0.35,
-      transparent: true, opacity: 0, depthWrite: false, fog: false });
-    this.snow = new THREE.Points(geometry, this.material);
-    this.snow.frustumCulled = false;
-    scene.add(this.snow);
+    geometry.setAttribute("position", new THREE.BufferAttribute(seeds, 3));
+    geometry.setAttribute("phase", new THREE.BufferAttribute(phases, 1));
+    this.material = new THREE.ShaderMaterial({
+      transparent: true,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+      uniforms: {
+        time: { value: 0 },
+        focus: { value: new THREE.Vector3() },
+        sunDir: { value: SUN_DIR },
+        viewHeight: { value: 720 },
+        pixelRatio: { value: 1 },
+      },
+      vertexShader: /* glsl */ `
+        attribute float phase;
+        uniform float time; uniform vec3 focus; uniform vec3 sunDir; uniform float viewHeight; uniform float pixelRatio;
+        varying float vGlow;
+        const float RANGE = ${RANGE.toFixed(1)};
+        void main() {
+          // a light breeze carries the crystals slowly down the valley as they settle
+          vec3 drift = vec3(0.16, -0.06 - phase * 0.08, 0.08) * time + 0.12 * sin(time * 0.35 + phase * 6.283 + vec3(0.0, 1.7, 3.1));
+          vec3 world = focus + mod(position + drift - focus, RANGE) - 0.5 * RANGE;
+          vec4 mv = viewMatrix * vec4(world, 1.0);
+          float dist = -mv.z;
+          // each crystal catches the sun for a moment, brightest when looking towards the sun
+          float glint = pow(max(sin(time * (0.6 + phase * 1.2) + phase * 40.0), 0.0), 48.0);
+          float toSun = max(dot(normalize(world - cameraPosition), sunDir), 0.0);
+          float fade = (1.0 - smoothstep(0.3 * RANGE, 0.5 * RANGE, dist)) * smoothstep(1.0, 3.0, dist);
+          vGlow = fade * (0.008 + glint * (0.16 + 0.32 * pow(toSun, 4.0)));
+          // Millimetre-scale reflections; cap their apparent size on high-DPI screens.
+          float diameter = 0.004 + phase * 0.004;
+          gl_PointSize = clamp(diameter * projectionMatrix[1][1] * viewHeight * 0.5 / max(dist, 0.1), 0.75 * pixelRatio, 2.0 * pixelRatio);
+          gl_Position = projectionMatrix * mv;
+        }`,
+      fragmentShader: /* glsl */ `
+        varying float vGlow;
+        void main() {
+          vec2 c = gl_PointCoord - 0.5;
+          float core = exp(-dot(c, c) * 18.0);
+          float a = core * (1.0 - smoothstep(0.3, 0.5, length(c))) * vGlow;
+          if (a < 0.004) discard;
+          gl_FragColor = vec4(0.94, 0.97, 1.0, a);
+          #include <tonemapping_fragment>
+          #include <colorspace_fragment>
+        }`,
+    });
+    this.sparkles = new THREE.Points(geometry, this.material);
+    this.sparkles.frustumCulled = false;
+    scene.add(this.sparkles);
   }
 
-  update(dt: number, time: number, focus: THREE.Vector3, scene: THREE.Scene, sun: THREE.DirectionalLight) {
-    this.intensity = lerp(this.intensity, stormAt(focus.x, focus.z), damp(1.4, dt));
-    this.snow.visible = this.intensity > 0.01;
-    this.material.opacity = this.intensity * 0.88;
-    if (this.snow.visible) {
-      for (let i = 0; i < this.seeds.length; i += 3) {
-        this.positions[i] = focus.x + ((this.seeds[i] * 100 + time * 14) % 100) - 50;
-        this.positions[i + 1] = focus.y + ((this.seeds[i + 1] * 50 - time * 8) % 50 + 50) % 50 - 12;
-        this.positions[i + 2] = focus.z + ((this.seeds[i + 2] * 100 + time * 4) % 100) - 50;
-      }
-      this.snow.geometry.getAttribute("position").needsUpdate = true;
-    }
-    const fog = scene.fog as THREE.Fog;
-    fog.color.copy(this.clearColor).lerp(this.stormColor, this.intensity);
-    fog.near = lerp(350, 8, this.intensity);
-    fog.far = lerp(5200, 135, Math.sqrt(this.intensity));
-    sun.intensity = lerp(2.6, 0.65, this.intensity);
-    scene.environmentIntensity = lerp(0.55, 0.8, this.intensity);
+  update(dt: number, camera: THREE.Camera, renderer: THREE.WebGLRenderer) {
+    const u = this.material.uniforms;
+    u.time.value += dt;
+    u.focus.value.copy(camera.position);
+    u.viewHeight.value = renderer.getDrawingBufferSize(this.size).y;
+    u.pixelRatio.value = renderer.getPixelRatio();
   }
 }

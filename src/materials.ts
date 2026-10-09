@@ -88,6 +88,43 @@ function addRim(mat: THREE.MeshStandardMaterial) {
   return mat;
 }
 
+const GLINT_CHUNK = /* glsl */ `
+  {
+    // Sunlit snow crystals: a sparse scatter of points that flash as the eye moves past them.
+    vec2 gp = vGlintPos.xz * 7.0;
+    vec2 cell = floor(gp);
+    float h = fract(sin(dot(cell, vec2(12.9898, 78.233))) * 43758.5453);
+    vec3 eye = normalize(cameraPosition - vGlintPos);
+    float glint = pow(max(sin(h * 6.283 + dot(eye, vec3(7.1, 4.7, 9.3))), 0.0), 80.0);
+    float px = length(fwidth(gp));
+    float r = max(0.035, 0.55 * px);
+    vec2 center = 0.5 + (vec2(h, fract(h * 13.7)) - 0.5) * 0.6;
+    vec2 offset = fract(gp) - center;
+    // Keep the reflected energy constant when antialiasing a subpixel crystal.
+    float dotShape = exp(-dot(offset, offset) / (r * r)) * pow(0.035 / r, 2.0);
+    // fade out before crystals shrink below a pixel and turn into noise
+    float fade = (1.0 - smoothstep(8.0, 24.0, length(cameraPosition - vGlintPos))) * (1.0 - smoothstep(0.3, 0.8, px));
+    float sunLit = clamp(dot(reflectedLight.directDiffuse, vec3(0.3, 0.6, 0.1)) * 1.4, 0.0, 1.0);
+    float sparse = step(0.82, fract(h * 21.7));
+    outgoingLight += vec3(1.0, 0.985, 0.955) * 0.55 * sparse * glint * dotShape * fade * sunLit;
+  }
+`;
+
+/** Lets sunlit snow glitter. */
+export function addSnowGlints(mat: THREE.MeshStandardMaterial) {
+  mat.onBeforeCompile = (shader) => {
+    shader.vertexShader = "varying vec3 vGlintPos;\n" + shader.vertexShader.replace(
+      "#include <project_vertex>",
+      "#include <project_vertex>\n  vGlintPos = (modelMatrix * vec4(transformed, 1.0)).xyz;",
+    );
+    shader.fragmentShader = "varying vec3 vGlintPos;\n" + shader.fragmentShader.replace(
+      "#include <opaque_fragment>",
+      GLINT_CHUNK + "#include <opaque_fragment>",
+    );
+  };
+  return mat;
+}
+
 const cache = new Map<string, THREE.MeshStandardMaterial>();
 
 export interface ClayOpts {
