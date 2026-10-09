@@ -1,5 +1,6 @@
 import type { World } from "./world";
 import { BOUNDS, KICKERS, LAKES, PISTES, landscapeAt } from "./layout";
+import type { Character } from "./characters";
 
 const MAP_W = 190;
 const MAP_H = Math.round((MAP_W * (BOUNDS.maxZ - BOUNDS.minZ)) / (BOUNDS.maxX - BOUNDS.minX));
@@ -16,6 +17,7 @@ export class Hud {
   mapOpen = false;
   onMapChange: () => void = () => {};
   private lastDist = -1;
+  private characterColor = "#168c87";
 
   constructor(world: World) {
     this.largeMap.width = this.largeMap.height = 760;
@@ -143,7 +145,12 @@ export class Hud {
 
   showTitle(show: boolean) {
     this.titleEl.classList.toggle("hidden", !show);
+    this.titleEl.inert = !show;
     this.hudEl.classList.toggle("hidden", show);
+  }
+
+  setCharacter(character: Character) {
+    this.characterColor = character.color;
   }
 
   toggleMap(open = !this.mapOpen) {
@@ -176,7 +183,7 @@ export class Hud {
     ctx.translate(x, y);
     // heading 0 faces +z, which is "down" on the map
     ctx.rotate(-heading);
-    ctx.fillStyle = "#e8423f";
+    ctx.fillStyle = this.characterColor;
     ctx.strokeStyle = "#fff";
     ctx.lineWidth = 1.5;
     ctx.beginPath();
