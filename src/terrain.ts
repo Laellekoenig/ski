@@ -1,13 +1,13 @@
 import * as THREE from "three";
 import { createNoise2D, fbm, clamp, lerp, smoothstep, mulberry32 } from "./noise";
 import { snowNormalMap } from "./materials";
-import { ENGADINE, geographicHeight } from "./engadine";
+import { mountainMaterial } from "./mountain-material";
+import { ENGADINE, geographicHeight, sampleElevation } from "./engadine";
 
 const X0 = -1760, Z0 = -400, CELL = 8;
 const NX = 441, NZ = 321;
 const X1 = X0 + (NX - 1) * CELL;
 const Z1 = Z0 + (NZ - 1) * CELL;
-const noiseA = createNoise2D(7);
 const noiseC = createNoise2D(29);
 
 // Seeded overlapping rolls: random shapes, repeatable runs for tuning mechanics.
@@ -202,10 +202,11 @@ export class Terrain {
     if (N !== nz) throw new Error("Far terrain requires a square grid");
     const pos = new Float32Array(N * N * 3);
     const col = new Float32Array(N * N * 3);
+    const exposure = new Float32Array(N * N);
     const snow = new THREE.Color(0xf1f5ff);
     const snowShade = new THREE.Color(0xc9d6f0);
-    const rock = new THREE.Color(0x6a6272);
     const c = new THREE.Color();
+    const elevationOffset = sampleElevation(0, 0) - baseHeight(0, 0);
     const hs = new Float32Array(N * N);
     for (let j = 0; j < N; j++) {
       for (let i = 0; i < N; i++) {
@@ -232,8 +233,21 @@ export class Terrain {
         const gz = (hs[ju * N + i] - hs[jd * N + i]) / ((ju - jd) * S);
         const ny = 1 / Math.sqrt(1 + gx * gx + gz * gz);
         c.copy(snow).lerp(snowShade, clamp(-gz * 0.8 + 0.3, 0, 1) * 0.6);
-        const steep = smoothstep(0.72, 0.5, ny + noiseA(x * 0.004, z * 0.004) * 0.1);
-        c.lerp(rock, steep);
+
+        // Wind-scoured crests expose rock even when the sampled summit is flat.
+        // Concave gullies and gentle snow basins retain their winter cover.
+        const r = 3;
+        const shoulders = (hs[j * N + Math.max(0, i - r)]
+          + hs[j * N + Math.min(N - 1, i + r)]
+          + hs[Math.max(0, j - r) * N + i]
+          + hs[Math.min(N - 1, j + r) * N + i]) * 0.25;
+        const ridge = smoothstep(4, 42, y - shoulders);
+        const steep = smoothstep(0.1, 0.34, 1 - ny);
+        const alpine = smoothstep(2350, 2800, y + elevationOffset);
+        // Fade back to snow before the far mesh meets the playable grid.
+        const outside = Math.max(X0 - x, x - X1, Z0 - z, z - Z1);
+        exposure[k] = alpine * (steep * 0.85 + ridge * 0.7)
+          * smoothstep(0, 320, outside);
         col[k * 3] = c.r;
         col[k * 3 + 1] = c.g;
         col[k * 3 + 2] = c.b;
@@ -256,9 +270,10 @@ export class Terrain {
     const geo = new THREE.BufferGeometry();
     geo.setAttribute("position", new THREE.BufferAttribute(pos, 3));
     geo.setAttribute("color", new THREE.BufferAttribute(col, 3));
+    geo.setAttribute("rockExposure", new THREE.BufferAttribute(exposure, 1));
     geo.setIndex(idx);
     geo.computeVertexNormals();
-    const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95, flatShading: false });
+    const mat = mountainMaterial();
     const mesh = new THREE.Mesh(geo, mat);
     mesh.receiveShadow = false;
     return mesh;
