@@ -9,13 +9,14 @@
   <body>
     <canvas id="game"></canvas>
 
-    <div id="hud" class="hidden">
+    <div id="hud" class="hidden" inert>
       <div class="card score">
         <div class="label">this run</div>
         <div class="big"><span id="dist">0</span><small>m</small></div>
         <div class="sub">best <span id="best">0</span> m</div>
       </div>
       <div class="card speedo"><span id="speed">0</span><small>km/h</small></div>
+      <div class="card skier-badge"><span class="skier-badge-dot"></span><span id="current-character">Beni</span><span id="current-species">Alpine ibex</span></div>
       <div class="card location"><div id="region-name">Vierwind summit</div><div id="conditions"></div><span id="altitude">640 m</span></div>
       <button class="card map" id="open-map" aria-label="Open trail map" aria-expanded="false">
         <span class="map-heading">VIERWIND <span>N ↑</span></span>
@@ -38,22 +39,38 @@
       </div>
     </section>
 
-    <div id="title">
+    <div id="title" aria-label="Choose your skier">
       <div class="title-card">
-        <h1>A Short Ski</h1>
-        <p class="tag">one lasting mountain · eight ways down · endless detours</p>
-        <ul class="keys">
-          <li><kbd>A</kbd><kbd>D</kbd> steer</li>
-          <li><kbd>W</kbd> tuck / skate</li>
-          <li><kbd>S</kbd> brake</li>
-          <li><kbd>Space</kbd> jump (steer to spin)</li>
-          <li><kbd>E</kbd> ride lift</li>
-          <li><kbd>R</kbd> back to summit</li>
-          <li><kbd>Tab</kbd> trail map</li>
-          <li><kbd>M</kbd> mute</li>
-          <li><kbd>Esc</kbd> pause</li>
-        </ul>
-        <p class="start">press any key to start</p>
+        <header class="title-header">
+          <div class="wordmark"><span class="swiss-mark" aria-hidden="true">✚</span>A Short Ski<span class="wordmark-dot">.</span></div>
+          <span class="club-label">THE ALPINE FRIENDS CLUB <span aria-hidden="true">✳</span></span>
+        </header>
+        <div class="selection-heading">
+          <p class="eyebrow">A LITTLE SWISS MOUNTAIN ADVENTURE</p>
+          <h1>Good slopes. <span>Great company.</span></h1>
+          <p class="tag">Five mountain friends. One lovely day in the snow.</p>
+        </div>
+        <div class="roster-heading"><h2>Pick your piste pal</h2><p>press <kbd>1</kbd> – <kbd>5</kbd> or click a friend</p></div>
+        <div class="character-roster" aria-label="Playable characters">
+          <div id="roster-track"></div>
+        </div>
+        <p id="character-announcement" aria-live="polite" aria-atomic="true"></p>
+        <div class="start-row">
+          <button id="start-button" type="button">Let’s ski, Beni! <span aria-hidden="true">↗</span></button>
+          <span class="start-hint">or press <kbd>Enter</kbd><span>Same slopes. Your kind of company.</span></span>
+        </div>
+        <footer class="selection-footer">
+          <span><kbd>A</kbd><kbd>D</kbd> steer</span>
+          <span><kbd>W</kbd> tuck</span>
+          <span><kbd>S</kbd> brake</span>
+          <span><kbd>Space</kbd> jump</span>
+          <span><kbd>E</kbd> lift</span>
+          <span><kbd>R</kbd> summit</span>
+          <span><kbd>Tab</kbd> trail map</span>
+          <span><kbd>Esc</kbd> pause</span>
+          <span>drag to look</span>
+          <span><kbd>M</kbd> mute</span>
+        </footer>
       </div>
     </div>
 

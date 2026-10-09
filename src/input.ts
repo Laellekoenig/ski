@@ -10,6 +10,10 @@ export interface InputState {
   actionPressed: boolean;
   resetPressed: boolean;
   mutePressed: boolean;
+  startPressed: boolean;
+  /** Zero-based roster slot; -1 when no number key was pressed. */
+  characterPressed: number;
+  characterStep: number;
   mapPressed: boolean;
   closeMapPressed: boolean;
   pausePressed: boolean;
@@ -17,7 +21,6 @@ export interface InputState {
   menuUp: boolean;
   menuDown: boolean;
   confirmPressed: boolean;
-  anyPressed: boolean;
   /** mouse drag-to-look: held, plus pixels moved since last frame */
   looking: boolean;
   lookDX: number;
@@ -47,13 +50,15 @@ export class Input {
     actionPressed: false,
     resetPressed: false,
     mutePressed: false,
+    startPressed: false,
+    characterPressed: -1,
+    characterStep: 0,
     mapPressed: false,
     closeMapPressed: false,
     pausePressed: false,
     menuUp: false,
     menuDown: false,
     confirmPressed: false,
-    anyPressed: false,
     looking: false,
     lookDX: 0,
     lookDY: 0,
@@ -61,14 +66,15 @@ export class Input {
 
   constructor() {
     window.addEventListener("keydown", (e) => {
-      if (e.code.startsWith("Arrow") || e.code === "Space" || e.code === "Tab") e.preventDefault();
+      if (e.code.startsWith("Arrow") || e.code === "Space" || (e.code === "Tab" && document.getElementById("title")!.classList.contains("hidden"))) e.preventDefault();
       if (!e.repeat) this.pressed.add(e.code);
       this.down.add(e.code);
     });
     window.addEventListener("keyup", (e) => this.down.delete(e.code));
-    window.addEventListener("blur", () => this.down.clear());
-    window.addEventListener("pointerdown", () => this.pressed.add("Pointer"));
-
+    window.addEventListener("blur", () => {
+      this.down.clear();
+      this.pressed.clear();
+    });
     const canvas = document.getElementById("game")!;
     canvas.addEventListener("pointerdown", (e) => {
       if (e.button !== 0 || this.dragId !== null) return;
@@ -107,11 +113,17 @@ export class Input {
     let actionPressed = this.pressed.has("KeyE") || this.pressed.has("Enter");
     let resetPressed = this.pressed.has("KeyR");
     const mutePressed = this.pressed.has("KeyM");
+    let startPressed = this.pressed.has("Enter") || this.pressed.has("NumpadEnter") || this.pressed.has("Space");
+    let characterPressed = -1;
+    for (const code of this.pressed) {
+      const match = /^(?:Digit|Numpad)([1-5])$/.exec(code);
+      if (match) characterPressed = Number(match[1]) - 1;
+    }
+    let characterStep = (this.pressed.has("ArrowRight") ? 1 : 0) - (this.pressed.has("ArrowLeft") ? 1 : 0);
     let pausePressed = this.pressed.has("Escape") || this.pressed.has("KeyP");
     let menuUp = UP.some((c) => this.pressed.has(c));
     let menuDown = DOWN.some((c) => this.pressed.has(c));
     let confirmPressed = jumpPressed || actionPressed;
-    let anyPressed = this.pressed.size > 0;
 
     const pad = navigator.getGamepads?.().find((p) => p && p.connected);
     if (pad) {
@@ -125,13 +137,14 @@ export class Input {
       jumpPressed ||= edge(0);
       actionPressed ||= edge(2) || edge(1);
       resetPressed ||= edge(3);
+      startPressed ||= edge(0) || edge(9);
+      characterStep += (edge(15) || edge(5) ? 1 : 0) - (edge(14) || edge(4) ? 1 : 0);
       pausePressed ||= edge(9);
       menuUp ||= edge(12);
       menuDown ||= edge(13);
       confirmPressed ||= edge(0);
-      anyPressed ||= pad.buttons.some((_, i) => edge(i));
       this.padPrev = pad.buttons.map((x) => x.pressed);
-    }
+    } else this.padPrev = [];
 
     s.steer = Math.max(-1, Math.min(1, steer));
     s.tuck = tuck;
@@ -141,13 +154,15 @@ export class Input {
     s.actionPressed = actionPressed;
     s.resetPressed = resetPressed;
     s.mutePressed = mutePressed;
+    s.startPressed = startPressed;
+    s.characterPressed = characterPressed;
+    s.characterStep = characterStep;
     s.mapPressed = this.pressed.has("Tab");
     s.closeMapPressed = this.pressed.has("Escape");
     s.pausePressed = pausePressed;
     s.menuUp = menuUp;
     s.menuDown = menuDown;
     s.confirmPressed = confirmPressed;
-    s.anyPressed = anyPressed;
     s.looking = this.dragId !== null;
     s.lookDX = this.dragX;
     s.lookDY = this.dragY;

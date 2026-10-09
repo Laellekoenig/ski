@@ -1,13 +1,10 @@
 import * as THREE from "three";
 import { clay } from "./materials";
 import { damp, lerp } from "./noise";
+import { CHARACTERS, type Character } from "./characters";
+import { sculptAnimal } from "./animals";
 
-const JACKET = 0xe8423f;
-const PANTS = 0x2f3f73;
-const SKIN = 0xffd2b0;
-const HAT = 0xf2c230;
 const WHITE = 0xfbfbf7;
-const SKI = 0x2ec4b6;
 const BOOT = 0x3a3f4a;
 const POLE = 0x9aa3ad;
 
@@ -59,6 +56,8 @@ export class Skier {
   private scarfTail = new THREE.Group();
   private pompom: THREE.Mesh;
   private eyes: THREE.Group[] = [];
+  private ears: THREE.Group[] = [];
+  private animalTail: THREE.Group;
   private legs: Leg[] = [];
 
   private crouch = 0;
@@ -76,7 +75,9 @@ export class Skier {
   private pompomVel = new THREE.Vector2();
   private pompomOff = new THREE.Vector2();
 
-  constructor() {
+  constructor(readonly character: Character = CHARACTERS[0]) {
+    const { jacket: JACKET, pants: PANTS, hat: HAT, skis: SKI } = character;
+    this.root.name = `skier-${character.id}`;
     this.root.add(this.lean);
     this.lean.add(this.hips);
     this.hips.add(this.torso);
@@ -115,6 +116,14 @@ export class Skier {
     const belly = mesh(new THREE.SphereGeometry(0.2, 14, 10), JACKET);
     belly.position.set(0, 0.12, 0.05);
     this.torso.add(belly);
+    // Rounded colour-block pockets on a puffy ski jacket.
+    for (const side of [-1, 1]) {
+      const pocket = mesh(new THREE.CapsuleGeometry(0.057, 0.035, 4, 10), HAT);
+      pocket.rotation.z = side * -0.28;
+      pocket.scale.z = 0.35;
+      pocket.position.set(side * 0.125, 0.13, 0.21);
+      this.torso.add(pocket);
+    }
     // zipper + swiss cross on the back
     const zip = mesh(new THREE.BoxGeometry(0.02, 0.3, 0.02), WHITE, { bump: 0.1 });
     zip.position.set(0, 0.24, 0.232);
@@ -141,63 +150,40 @@ export class Skier {
     // ---- head
     this.head.position.y = 0.72;
     this.torso.add(this.head);
-    const skull = mesh(new THREE.SphereGeometry(0.3, 24, 18), SKIN, { bump: 0.3 });
-    skull.scale.set(1.05, 0.95, 1);
-    this.head.add(skull);
-    for (const s of [-1, 1]) {
-      const eye = new THREE.Group();
-      const ball = mesh(new THREE.SphereGeometry(0.045, 12, 10), 0x1d1b22, { roughness: 0.3, bump: 0 });
-      ball.scale.set(0.85, 1.25, 0.6);
-      const shine = mesh(new THREE.SphereGeometry(0.014, 8, 6), 0xffffff, { roughness: 0.2, bump: 0 });
-      shine.position.set(0.012, 0.022, 0.024);
-      eye.add(ball, shine);
-      eye.position.set(s * 0.105, 0.0, 0.272);
-      eye.rotation.y = s * 0.3;
-      this.head.add(eye);
-      this.eyes.push(eye);
-      const cheek = mesh(new THREE.SphereGeometry(0.05, 10, 8), 0xff8f8f, { bump: 0.1 });
-      cheek.scale.set(1, 0.6, 0.35);
-      cheek.position.set(s * 0.175, -0.075, 0.235);
-      cheek.rotation.y = s * 0.6;
-      this.head.add(cheek);
-    }
-    const nose = mesh(new THREE.SphereGeometry(0.04, 10, 8), 0xffb08a, { bump: 0.2 });
-    nose.position.set(0, -0.04, 0.3);
-    this.head.add(nose);
-    const mouth = mesh(new THREE.TorusGeometry(0.035, 0.009, 6, 12, Math.PI), 0x7a3030, { bump: 0 });
-    mouth.position.set(0, -0.105, 0.272);
-    mouth.rotation.set(0.25, 0, Math.PI);
-    this.head.add(mouth);
+    const animal = sculptAnimal(this.head, this.torso, character);
+    this.eyes = animal.eyes;
+    this.ears = animal.ears;
+    this.animalTail = animal.tail;
 
     // beanie
-    const hat = mesh(new THREE.SphereGeometry(0.315, 22, 12, 0, Math.PI * 2, 0, Math.PI / 2), HAT);
-    hat.position.y = 0.04;
+    const hat = mesh(new THREE.SphereGeometry(0.275, 22, 12, 0, Math.PI * 2, 0, Math.PI / 2), HAT);
+    hat.position.set(0, 0.09, -0.045);
     hat.scale.set(1.04, 1.05, 1.02);
     this.head.add(hat);
-    const rim = mesh(new THREE.TorusGeometry(0.31, 0.055, 8, 24), HAT);
+    const rim = mesh(new THREE.TorusGeometry(0.272, 0.045, 8, 24), HAT);
     rim.rotation.x = Math.PI / 2;
-    rim.position.y = 0.07;
+    rim.position.set(0, 0.1, -0.045);
     rim.scale.set(1.04, 1.02, 1);
     this.head.add(rim);
     for (let i = 0; i < 3; i++) {
-      const band = mesh(new THREE.TorusGeometry(0.3 - i * 0.07, 0.022, 6, 24), JACKET);
+      const band = mesh(new THREE.TorusGeometry(0.26 - i * 0.07, 0.022, 6, 24), JACKET);
       band.rotation.x = Math.PI / 2;
-      band.position.y = 0.15 + i * 0.07;
+      band.position.set(0, 0.18 + i * 0.07, -0.045);
       band.scale.setScalar(1 - i * 0.12);
       this.head.add(band);
     }
-    this.pompom = mesh(new THREE.IcosahedronGeometry(0.095, 2), WHITE, { bump: 0.9 });
+    this.pompom = mesh(new THREE.SphereGeometry(0.087, 14, 10), WHITE, { bump: 0.9 });
     this.pompom.position.y = 0.38;
     this.head.add(this.pompom);
     // goggles resting on the hat
-    const strap = mesh(new THREE.TorusGeometry(0.33, 0.022, 6, 28), 0x30343c);
+    const strap = mesh(new THREE.TorusGeometry(0.285, 0.022, 6, 28), 0x30343c);
     strap.rotation.x = Math.PI / 2 - 0.25;
-    strap.position.set(0, 0.16, -0.02);
+    strap.position.set(0, 0.19, -0.045);
     this.head.add(strap);
-    const lens = mesh(new THREE.CapsuleGeometry(0.07, 0.12, 4, 12), 0xff9a3c, { roughness: 0.15, bump: 0 });
+    const lens = mesh(new THREE.CapsuleGeometry(0.07, 0.12, 4, 12), 0x8bdce4, { roughness: 0.15, bump: 0 });
     lens.rotation.z = Math.PI / 2;
     lens.scale.set(1, 1, 0.5);
-    lens.position.set(0, 0.24, 0.255);
+    lens.position.set(0, 0.255, 0.22);
     lens.rotation.x = -0.35;
     this.head.add(lens);
 
@@ -225,6 +211,12 @@ export class Skier {
       arm.add(pole);
       this.torso.add(arm);
     }
+  }
+
+  dispose() {
+    this.root.traverse((part) => {
+      if (part instanceof THREE.Mesh) part.geometry.dispose();
+    });
   }
 
   private placeSegment(m: THREE.Mesh, a: THREE.Vector3, b: THREE.Vector3) {
@@ -343,6 +335,11 @@ export class Skier {
     this.pompomVel.y += (-this.pompomOff.y * 120 - this.pompomVel.y * 8 + accel + wind * 2) * dt;
     this.pompomOff.addScaledVector(this.pompomVel, dt);
     this.pompom.position.set(this.pompomOff.x * 0.12, 0.38, -this.pompomOff.y * 0.12);
+
+    this.animalTail.rotation.y = Math.sin(t * 3.5) * (0.14 + wind * 0.15);
+    this.ears.forEach((ear, i) => {
+      ear.rotation.x = Math.sin(t * 2.4 + i * 0.8) * 0.045 + wind * 0.12;
+    });
 
     // --- blink
     this.blinkTimer -= dt;
