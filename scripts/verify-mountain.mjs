@@ -17,7 +17,7 @@ export async function verifyMountain(game) {
   debug.pauseSimulation = true;
   player.events = {};
   const step = (seconds, keys = {}) => {
-    for (let i = 0; i < seconds * 120; i++) player.update(1 / 120, { ...input, ...keys, jumpPressed: i === 0 && !!keys.jumpPressed });
+    for (let i = 0; i < seconds * 120; i++) player.update(1 / 120, { ...input, ...keys, jumpPressed: i === 0 && !!keys.jumpPressed, swingPressed: i === 0 ? keys.swingPressed ?? 0 : 0 });
   };
   try {
     const response = await fetch('/src/data/engadine.bin');
@@ -57,6 +57,16 @@ export async function verifyMountain(game) {
     const speed = player.speed;
     step(3, { tuck: false, brake: true });
     check('Braking slows the skier', player.speed < speed * 0.5);
+    const swingRun = (swingPressed) => {
+      player.spawnAt(0, 250, 0);
+      step(5, { tuck: false });
+      const before = player.speed;
+      step(0.5, { tuck: false, swingPressed });
+      return { before, after: player.speed };
+    };
+    const glide = swingRun(0);
+    const swung = swingRun(1);
+    check('A double-tap swing sheds speed without stopping', swung.after < glide.after - 2 && swung.after > swung.before * 0.5);
     player.spawnAt(0, 250, 0);
     step(4);
     step(0.25, { jumpPressed: true });

@@ -26,6 +26,12 @@ const SKATE_MAX_GRADE = 0.07;
 /** Jump pop along the snow's normal, plus a little straight up. */
 const JUMP_POP = 3.4;
 const JUMP_LIFT = 0.8;
+/** Double-tap swing: a quick pivot across the skis that sheds part of the speed in a burst of snow. */
+const SWING_TIME = 0.45;
+const SWING_YAW = 0.5;
+const SWING_SHED = 0.3;
+const SWING_SHED_MAX = 6;
+const SWING_MIN_SPEED = 4;
 /** Down the single snowfield, toward the Engadine backdrop. */
 export const START_HEADING = 0;
 
@@ -36,6 +42,7 @@ export interface PlayerEvents {
   onLand?: (impact: number, airTime: number) => void;
   onCrash?: () => void;
   onTrick?: (label: string) => void;
+  onSwing?: () => void;
   onFinish?: (runDistance: number) => void;
 }
 
@@ -69,6 +76,11 @@ export class Player {
   private sprayAcc = 0;
   private skate = 0;
   private ducking = false;
+  /** Seconds left in the current swing, its side, and its speed loss in m/s². */
+  private swingT = 0;
+  private swingSide = 0;
+  private swingDecel = 0;
+  private cloudAcc = 0;
   /** Smoothed pose signals for the rider's animation. */
   private yawRate = 0;
   private accel = 0;
@@ -147,6 +159,7 @@ export class Player {
     this.finished = false;
     this.airTime = this.spin = this.crashTimer = this.tumble = this.steer = this.skid = 0;
     this.yawRate = this.accel = this.absorb = this.lastSpeed = 0;
+    this.swingT = this.cloudAcc = 0;
     this.lastHeading = this.heading;
     this.world.terrain.normalAt(this.pos.x, this.pos.z, this.n);
     this.visN.copy(this.n);
@@ -179,16 +192,20 @@ export class Player {
 
     const tuck = input.tuck && !crashed;
     const brake = input.brake && !crashed;
+    this.swingT = crashed ? 0 : Math.max(0, this.swingT - dt);
     this.surface = t.surfaceAt(this.pos.x, this.pos.z);
 
     if (this.grounded) {
       t.normalAt(this.pos.x, this.pos.z, this.n);
       const n = this.n;
       const speed = this.vel.length();
+      if (input.swingPressed && !crashed && this.swingT <= 0 && speed > SWING_MIN_SPEED) this.startSwing(input.swingPressed, speed);
+      const swing = this.swingEnvelope();
       if (!crashed) {
         const speedN = Math.min(1, speed / 25);
         const rate = (brake ? 2.8 : 2.4) - speedN * 0.9;
-        this.heading -= this.steer * rate * dt;
+        // the swing pivots the skis across the line of travel; the momentum keeps going, so they skid
+        this.heading -= (this.steer * rate + this.swingSide * swing * SWING_YAW * Math.PI / (2 * SWING_TIME)) * dt;
       }
       this.fwd.set(Math.sin(this.heading), 0, Math.cos(this.heading));
       this.fwd.addScaledVector(n, -this.fwd.dot(n)).normalize();
@@ -210,13 +227,14 @@ export class Player {
         let vl = this.vel.dot(this.lat);
         // edges grip: sideways motion bleeds off, part of its energy is carved into
         // forward speed. Never more than was lost, so turning can't pump up speed.
-        const grip = crashed ? 1.2 : brake ? 2.2 : 7.5;
+        // (a swing skids too, but its speed loss is metered separately below)
+        const grip = crashed ? 1.2 : brake ? 2.2 : swing > 0 ? 3 : 7.5;
         const newVl = vl * Math.exp(-grip * dt);
         if (!crashed && !brake) {
           vf = Math.sign(vf || 1) * Math.sqrt(vf * vf + CARVE_KEEP * (vl * vl - newVl * newVl));
         }
         vl = newVl;
-        this.skid = Math.min(1, Math.abs(vl) / 4 + (brake ? Math.min(1, speed / 6) : 0));
+        this.skid = Math.min(1, Math.abs(vl) / 4 + (brake ? Math.min(1, speed / 6) : 0) + swing * 2);
 
         // friction & drag
         const mu = (crashed ? 0.6 : MU) + (brake ? 0.55 : 0);
@@ -229,6 +247,12 @@ export class Player {
         }
         const drag = this.ducking ? DRAG_DUCK : tuck ? DRAG_TUCK : DRAG;
         vf -= Math.sign(vf) * drag * vf * vf * dt;
+        const sw = Math.hypot(vf, vl);
+        if (swing > 0 && sw > 1e-4) {
+          const f = Math.max(0, sw - this.swingDecel * swing * dt) / sw;
+          vf *= f;
+          vl *= f;
+        }
 
         // skating / pushing off: only gets you going on the flat, it can't beat
         // gravity up a real slope or keep pushing once the skis are running
@@ -309,6 +333,21 @@ export class Player {
       this.trails.break();
       this.events.onFinish?.(this.runDistance);
     }
+  }
+
+  private startSwing(side: number, speed: number) {
+    this.swingT = SWING_TIME;
+    this.swingSide = Math.sign(side);
+    // the envelope averages 2/π, so this sheds exactly the planned speed over the swing
+    this.swingDecel = Math.min(speed * SWING_SHED, SWING_SHED_MAX) / (SWING_TIME * 2 / Math.PI);
+    this.squash = Math.max(this.squash, 0.3);
+    this.cloudAcc = 18; // the opening puff
+    this.events.onSwing?.();
+  }
+
+  /** 0..1..0 over the swing: the skis bite hardest in the middle. */
+  private swingEnvelope() {
+    return this.swingT > 0 ? Math.sin(Math.PI * (1 - this.swingT / SWING_TIME)) : 0;
   }
 
   private land(gy: number) {
@@ -481,5 +520,23 @@ export class Player {
         );
       }
     }
+    // swing: a soft cloud of powder thrown out from the edges, hanging in the air a moment
+    if (this.grounded && !crashed && this.swingT > 0) {
+      this.cloudAcc += 90 * this.swingEnvelope() * dt;
+      const side = Math.sign(this.vel.dot(this.lat)) || -this.swingSide;
+      while (this.cloudAcc > 1) {
+        this.cloudAcc -= 1;
+        const p = this.tmp.copy(this.pos).addScaledVector(this.fwd, -0.6 + Math.random() * 1.2).addScaledVector(this.lat, side * 0.3);
+        p.y += 0.15;
+        this.particles.emit(
+          p,
+          new THREE.Vector3((Math.random() - 0.5) * 1.5, 1.5 + Math.random() * 2.5, (Math.random() - 0.5) * 1.5)
+            .addScaledVector(this.vel, 0.55)
+            .addScaledVector(this.lat, side * (2 + Math.random() * 2.5)),
+          // some puffs catch the light, some sit in their own shade, so the cloud reads against the snow
+          { size: 0.22 + Math.random() * 0.3, life: 1 + Math.random() * 0.7, grow: 2.6, gravity: 0.2, drag: 3, color: Math.random() < 0.5 ? 0xffffff : 0xc9d3e4 },
+        );
+      }
+    } else this.cloudAcc = 0;
   }
 }
