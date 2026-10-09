@@ -4,7 +4,7 @@ import { World } from "./world";
 import { Particles } from "./particles";
 import { Trails } from "./trails";
 import { Player } from "./player";
-import { Input } from "./input";
+import { Input, type InputState } from "./input";
 import { Hud } from "./hud";
 import { Audio } from "./audio";
 import { damp, lerp } from "./noise";
@@ -84,6 +84,51 @@ function snapCamera() {
 }
 snapCamera();
 
+// ---- drag-to-look: orbit the usual shot around the skier, easing back once released
+const LOOK_ELEV_MIN = -0.2;
+const LOOK_ELEV_MAX = 1.3;
+let lookYaw = 0;
+let lookPitch = 0;
+const viewPos = new THREE.Vector3();
+const viewLook = new THREE.Vector3();
+const lookFocus = new THREE.Vector3();
+const lookAxis = new THREE.Vector3();
+const lookQ = new THREE.Quaternion();
+const pitchQ = new THREE.Quaternion();
+const UP = new THREE.Vector3(0, 1, 0);
+
+function updateLook(dt: number, st: InputState) {
+  if (st.looking) {
+    const k = Math.PI / window.innerHeight;
+    lookYaw -= st.lookDX * k;
+    lookPitch += st.lookDY * k;
+  } else {
+    lookYaw = lerp(lookYaw, 0, damp(5, dt));
+    lookPitch = lerp(lookPitch, 0, damp(5, dt));
+    if (Math.abs(lookYaw) < 1e-4) lookYaw = 0;
+    if (Math.abs(lookPitch) < 1e-4) lookPitch = 0;
+  }
+  // keep the shortest way home after spinning around a few times
+  lookYaw = Math.atan2(Math.sin(lookYaw), Math.cos(lookYaw));
+}
+
+function applyLook() {
+  viewPos.copy(camPos);
+  viewLook.copy(camLook);
+  if (lookYaw === 0 && lookPitch === 0) return;
+  lookFocus.copy(player.pos).y += 1.2;
+  const offset = viewPos.sub(lookFocus);
+  const elev = Math.asin(offset.y / offset.length());
+  // store the clamped pitch so dragging past a limit doesn't wind up
+  lookPitch = Math.min(LOOK_ELEV_MAX, Math.max(LOOK_ELEV_MIN, elev + lookPitch)) - elev;
+  pitchQ.setFromAxisAngle(lookAxis.crossVectors(offset, UP).normalize(), lookPitch);
+  lookQ.setFromAxisAngle(UP, lookYaw).multiply(pitchQ);
+  viewPos.applyQuaternion(lookQ).add(lookFocus);
+  viewLook.sub(lookFocus).applyQuaternion(lookQ).add(lookFocus);
+  const ground = world.terrain.heightAt(viewPos.x, viewPos.z) + 1.2;
+  if (viewPos.y < ground) viewPos.y = ground;
+}
+
 const tmpV = new THREE.Vector3();
 function updateCamera(dt: number) {
   const p = player.pos;
@@ -129,8 +174,9 @@ function updateCamera(dt: number) {
     camLook.lerp(look, damp(14, dt));
     camera.fov = lerp(camera.fov, 55 + Math.min(1, speed / 32) * 14, damp(2, dt));
   }
-  camera.position.copy(camPos);
-  camera.lookAt(camLook);
+  applyLook();
+  camera.position.copy(viewPos);
+  camera.lookAt(viewLook);
   camera.updateProjectionMatrix();
 }
 
@@ -192,6 +238,7 @@ function frame(now: number) {
 
   particles.update(dt);
   world.update(dt, time, player.pos, particles);
+  updateLook(dt, st);
   if (!debug.freezeCamera) updateCamera(dt);
 
   let prompt = "";
@@ -214,6 +261,7 @@ if (import.meta.env.DEV) {
       player.update(STEP, { ...input.state, ...keys, jumpPressed: i === 0 && !!keys.jumpPressed, actionPressed: i === 0 && !!keys.actionPressed });
       particles.update(STEP);
       world.update(STEP, (time += STEP), player.pos, particles);
+      updateLook(STEP, { ...input.state, lookDX: 0, lookDY: 0 });
       updateCamera(STEP);
       sample?.();
     }
