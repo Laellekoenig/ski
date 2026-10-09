@@ -20,6 +20,10 @@ body {
   font-family: "Fredoka", ui-rounded, system-ui, sans-serif;
   color: var(--ink);
   user-select: none;
+}
+
+/* hide the cursor only while actually skiing; title + pause menu keep it */
+body.playing {
   cursor: none;
 }
 
@@ -29,7 +33,6 @@ body {
   width: 100%;
   height: 100%;
   display: block;
-  cursor: none;
   touch-action: none;
 }
 
