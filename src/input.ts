@@ -14,8 +14,6 @@ export interface InputState {
   /** Zero-based roster slot; -1 when no number key was pressed. */
   characterPressed: number;
   characterStep: number;
-  mapPressed: boolean;
-  closeMapPressed: boolean;
   pausePressed: boolean;
   /** pause menu navigation, edge-triggered */
   menuUp: boolean;
@@ -53,8 +51,6 @@ export class Input {
     startPressed: false,
     characterPressed: -1,
     characterStep: 0,
-    mapPressed: false,
-    closeMapPressed: false,
     pausePressed: false,
     menuUp: false,
     menuDown: false,
@@ -66,7 +62,7 @@ export class Input {
 
   constructor() {
     window.addEventListener("keydown", (e) => {
-      if (e.code.startsWith("Arrow") || e.code === "Space" || (e.code === "Tab" && document.getElementById("title")!.classList.contains("hidden"))) e.preventDefault();
+      if (e.code.startsWith("Arrow") || e.code === "Space") e.preventDefault();
       if (!e.repeat) this.pressed.add(e.code);
       this.down.add(e.code);
     });
@@ -157,8 +153,6 @@ export class Input {
     s.startPressed = startPressed;
     s.characterPressed = characterPressed;
     s.characterStep = characterStep;
-    s.mapPressed = this.pressed.has("Tab");
-    s.closeMapPressed = this.pressed.has("Escape");
     s.pausePressed = pausePressed;
     s.menuUp = menuUp;
     s.menuDown = menuDown;

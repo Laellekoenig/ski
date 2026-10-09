@@ -1,0 +1,189 @@
+{
+  "source": "swisstopo terrain service (swissALTI3D-based quantized mesh)",
+  "attribution": "\u00a9swisstopo",
+  "sourceDocumentation": "https://docs.geo.admin.ch/visualize-data/terrain-service.html",
+  "terms": "https://www.swisstopo.admin.ch/en/terms-of-use-free-geodata-and-geoservices",
+  "revision": "20250101",
+  "version": "1.43646.0",
+  "zoom": 11,
+  "origin": {
+    "longitude": 9.819294,
+    "latitude": 46.508484,
+    "bearing": 145
+  },
+  "projection": {
+    "method": "local equirectangular, rotated to viewing bearing",
+    "metresPerDegreeLongitude": 76750.69556006267,
+    "metresPerDegreeLatitude": 111161.21578552763
+  },
+  "grid": {
+    "x0": -20000,
+    "z0": -12000,
+    "cell": 80,
+    "nx": 501,
+    "nz": 501
+  },
+  "encoding": "uint16 little-endian; row-major, x fastest; heights in decimetres as supplied by the service",
+  "heightScale": 0.1,
+  "minHeight": 677.5869261868407,
+  "maxHeight": 4010.0576222353634,
+  "sha256": "12bda9b595e72c704ed7557086614d81fd233ae1d5a07dc7acecdafac73c1f2f",
+  "sources": [
+    {
+      "url": "https://3d.geo.admin.ch/ch.swisstopo.terrain.3d/v1/20250101/11/2156/1552.terrain?v=1.43646.0",
+      "sha256": "8e2277ffb120b0a1c055c0dd4e912143c527a411928ad7116d3aac4add15d845"
+    },
+    {
+      "url": "https://3d.geo.admin.ch/ch.swisstopo.terrain.3d/v1/20250101/11/2156/1553.terrain?v=1.43646.0",
+      "sha256": "2e88a3295c7bf45d11e810ee3b81c5649230d905af3220abb43ee1cdce558074"
+    },
+    {
+      "url": "https://3d.geo.admin.ch/ch.swisstopo.terrain.3d/v1/20250101/11/2157/1551.terrain?v=1.43646.0",
+      "sha256": "728034454a945dbb73a481b5c89b62468b6b60d894c2576ffc9ab4ef41da3e27"
+    },
+    {
+      "url": "https://3d.geo.admin.ch/ch.swisstopo.terrain.3d/v1/20250101/11/2157/1552.terrain?v=1.43646.0",
+      "sha256": "e23fd9049efa5aacdaa1e2f65406e26656aca83c60e3c2f534576f94749b74ab"
+    },
+    {
+      "url": "https://3d.geo.admin.ch/ch.swisstopo.terrain.3d/v1/20250101/11/2157/1553.terrain?v=1.43646.0",
+      "sha256": "6f14b5dc1043c6ea5dfa45fb8c3989bdd5bf4f76b8bdeaa6778a8993ffba88f2"
+    },
+    {
+      "url": "https://3d.geo.admin.ch/ch.swisstopo.terrain.3d/v1/20250101/11/2158/1550.terrain?v=1.43646.0",
+      "sha256": "877a25791ac29a2ec637b8ef66678f020885f24bd2713e464ee7d9468a18a8d3"
+    },
+    {
+      "url": "https://3d.geo.admin.ch/ch.swisstopo.terrain.3d/v1/20250101/11/2158/1551.terrain?v=1.43646.0",
+      "sha256": "5aeef7bfea844b6a5c89850c8ae2839bbf5693c82ff6dbca23e91f4b5a57f03f"
+    },
+    {
+      "url": "https://3d.geo.admin.ch/ch.swisstopo.terrain.3d/v1/20250101/11/2158/1552.terrain?v=1.43646.0",
+      "sha256": "b9f7c670adbf1f8064b07e251814c3b96f67bb8a1a248758051acf55cab1985a"
+    },
+    {
+      "url": "https://3d.geo.admin.ch/ch.swisstopo.terrain.3d/v1/20250101/11/2158/1553.terrain?v=1.43646.0",
+      "sha256": "e8ce3f5f8c97223b74d828aa92d3c2c9f7b000f2a7efb9f517bc6eaeda4ca9ee"
+    },
+    {
+      "url": "https://3d.geo.admin.ch/ch.swisstopo.terrain.3d/v1/20250101/11/2158/1554.terrain?v=1.43646.0",
+      "sha256": "1999c0bf29eeea798f6fe69fed28e1b9c6ef3111ed7c1a0435f139bdb5b4bbe6"
+    },
+    {
+      "url": "https://3d.geo.admin.ch/ch.swisstopo.terrain.3d/v1/20250101/11/2159/1549.terrain?v=1.43646.0",
+      "sha256": "f2ca20b6e819d92675bd1817dc7481c7a6db27bbbeb95c2c4393c7a1bb3f9f0a"
+    },
+    {
+      "url": "https://3d.geo.admin.ch/ch.swisstopo.terrain.3d/v1/20250101/11/2159/1550.terrain?v=1.43646.0",
+      "sha256": "d537f35d7d6f4c117378afa6c166a017b81c7d0ac89ffbb5031ad8ce018878ac"
+    },
+    {
+      "url": "https://3d.geo.admin.ch/ch.swisstopo.terrain.3d/v1/20250101/11/2159/1551.terrain?v=1.43646.0",
+      "sha256": "7bc63cad89fa53c72e26e58cba03839d111076769e42e6b2691eb62bcba2501a"
+    },
+    {
+      "url": "https://3d.geo.admin.ch/ch.swisstopo.terrain.3d/v1/20250101/11/2159/1552.terrain?v=1.43646.0",
+      "sha256": "b6d6f915f08f91a0ca82cda50b017f4f9f4976288876587e91c432938f36916c"
+    },
+    {
+      "url": "https://3d.geo.admin.ch/ch.swisstopo.terrain.3d/v1/20250101/11/2159/1553.terrain?v=1.43646.0",
+      "sha256": "bd1a8a120ce7acbb7baad98c2bf079612ac141b6549df9609564ff15155333b3"
+    },
+    {
+      "url": "https://3d.geo.admin.ch/ch.swisstopo.terrain.3d/v1/20250101/11/2159/1554.terrain?v=1.43646.0",
+      "sha256": "aeba09e8f1bd2ba7fbe7671f28a72ce3e1b7c9a80f76e0dbdb1b1f322546b232"
+    },
+    {
+      "url": "https://3d.geo.admin.ch/ch.swisstopo.terrain.3d/v1/20250101/11/2160/1549.terrain?v=1.43646.0",
+      "sha256": "e526b4b937b2f783cba44d0af3b8c97d50622b48be8681a0f9212e582f09aa78"
+    },
+    {
+      "url": "https://3d.geo.admin.ch/ch.swisstopo.terrain.3d/v1/20250101/11/2160/1550.terrain?v=1.43646.0",
+      "sha256": "4768a1330bb5a17fb20ce747d9049339cbd958040de96378e2b99dc9811a0861"
+    },
+    {
+      "url": "https://3d.geo.admin.ch/ch.swisstopo.terrain.3d/v1/20250101/11/2160/1551.terrain?v=1.43646.0",
+      "sha256": "72456c97e4d5bcc118d01f34e8189716dfcf5e7e8d8f4e810b9b42c5189ae36c"
+    },
+    {
+      "url": "https://3d.geo.admin.ch/ch.swisstopo.terrain.3d/v1/20250101/11/2160/1552.terrain?v=1.43646.0",
+      "sha256": "0029fafcdf11daa501263abbf0136b9eee699553e7522ecb7af76fd8070fac4b"
+    },
+    {
+      "url": "https://3d.geo.admin.ch/ch.swisstopo.terrain.3d/v1/20250101/11/2160/1553.terrain?v=1.43646.0",
+      "sha256": "3d85658b0100a9837005c6293002bfb22be9a3f81d800c67c527b3aa47d488c7"
+    },
+    {
+      "url": "https://3d.geo.admin.ch/ch.swisstopo.terrain.3d/v1/20250101/11/2160/1554.terrain?v=1.43646.0",
+      "sha256": "b827e7b1ad8e67fb8904a016bc991d46de489b13610783fc52dd0aa9b3478938"
+    },
+    {
+      "url": "https://3d.geo.admin.ch/ch.swisstopo.terrain.3d/v1/20250101/11/2160/1555.terrain?v=1.43646.0",
+      "sha256": "de493315e99cee6ea5f4d80021e89e7540818433904fc95d961b35e9c186bddd"
+    },
+    {
+      "url": "https://3d.geo.admin.ch/ch.swisstopo.terrain.3d/v1/20250101/11/2161/1550.terrain?v=1.43646.0",
+      "sha256": "f3bd4bf3398bf8cc257e9211f1363176c0de7893694f45230af109ec0e1d8acf"
+    },
+    {
+      "url": "https://3d.geo.admin.ch/ch.swisstopo.terrain.3d/v1/20250101/11/2161/1551.terrain?v=1.43646.0",
+      "sha256": "aa6831ef427c9675daa71d2657e4afec6eecbb3911aa40275f28486fe7e81468"
+    },
+    {
+      "url": "https://3d.geo.admin.ch/ch.swisstopo.terrain.3d/v1/20250101/11/2161/1552.terrain?v=1.43646.0",
+      "sha256": "7c7dd1787195c88922e24e6b840f16f1f66f2db128293fd27303a1907681dc88"
+    },
+    {
+      "url": "https://3d.geo.admin.ch/ch.swisstopo.terrain.3d/v1/20250101/11/2161/1553.terrain?v=1.43646.0",
+      "sha256": "223b1a74fcd86a68f9cece51ac4d7ca5a91d1a7014bef218e125cdf83bddf61b"
+    },
+    {
+      "url": "https://3d.geo.admin.ch/ch.swisstopo.terrain.3d/v1/20250101/11/2161/1554.terrain?v=1.43646.0",
+      "sha256": "711126629f8d78323ee7fca21713367f9d124021f1ca7e5e361a049353848582"
+    },
+    {
+      "url": "https://3d.geo.admin.ch/ch.swisstopo.terrain.3d/v1/20250101/11/2161/1555.terrain?v=1.43646.0",
+      "sha256": "ee34cf880289240ffe3f4a69f5cf12138c0fccda2753bef150bab5e0ac0640bc"
+    },
+    {
+      "url": "https://3d.geo.admin.ch/ch.swisstopo.terrain.3d/v1/20250101/11/2162/1550.terrain?v=1.43646.0",
+      "sha256": "c7f6fb141b43d260276b0615f49d8de90d7f21bef1218bf7c5d99e49a3cff24e"
+    },
+    {
+      "url": "https://3d.geo.admin.ch/ch.swisstopo.terrain.3d/v1/20250101/11/2162/1551.terrain?v=1.43646.0",
+      "sha256": "2e917d495e6705b186e8c74a18d86c8198c0d416a63fae7222b5557535b205e6"
+    },
+    {
+      "url": "https://3d.geo.admin.ch/ch.swisstopo.terrain.3d/v1/20250101/11/2162/1552.terrain?v=1.43646.0",
+      "sha256": "7d867b3d9db31b43beec401d7b82aa0c2f19e2dc0da192ffd94c0418bbbfa355"
+    },
+    {
+      "url": "https://3d.geo.admin.ch/ch.swisstopo.terrain.3d/v1/20250101/11/2162/1553.terrain?v=1.43646.0",
+      "sha256": "56973d077de939036aa3e6814cea99b8acf01edd644f6d06bfd561ce593bbdd0"
+    },
+    {
+      "url": "https://3d.geo.admin.ch/ch.swisstopo.terrain.3d/v1/20250101/11/2162/1554.terrain?v=1.43646.0",
+      "sha256": "9ea48ddcfdfe80c7d26da805fd8c502ec23b31f53b752b3f2de0e980325260b7"
+    },
+    {
+      "url": "https://3d.geo.admin.ch/ch.swisstopo.terrain.3d/v1/20250101/11/2163/1551.terrain?v=1.43646.0",
+      "sha256": "33c16c13dc6a8964dc37149733a04250f91c7919391adb15b42fbf24407e9cca"
+    },
+    {
+      "url": "https://3d.geo.admin.ch/ch.swisstopo.terrain.3d/v1/20250101/11/2163/1552.terrain?v=1.43646.0",
+      "sha256": "951c7d2f0bc4591a1eadcb646f17f0f9c0901c5f3520464571d13ff1eb164b3f"
+    },
+    {
+      "url": "https://3d.geo.admin.ch/ch.swisstopo.terrain.3d/v1/20250101/11/2163/1553.terrain?v=1.43646.0",
+      "sha256": "374a56493e03efd33b7e93208c0fcab26305bbeb517c2d7922443c86a73338c4"
+    },
+    {
+      "url": "https://3d.geo.admin.ch/ch.swisstopo.terrain.3d/v1/20250101/11/2164/1551.terrain?v=1.43646.0",
+      "sha256": "b27093d49b70acd7d6c0135ed5d8f92c5a822a533efb3ae6c027716492c40540"
+    },
+    {
+      "url": "https://3d.geo.admin.ch/ch.swisstopo.terrain.3d/v1/20250101/11/2164/1552.terrain?v=1.43646.0",
+      "sha256": "15b43415383f58c2406858ca31b75b30c76a43e3af04eace8976bddfb439fd02"
+    }
+  ]
+}
