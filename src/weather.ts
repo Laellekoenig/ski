@@ -10,7 +10,6 @@ const RANGE = 40;
 export class Weather {
   readonly sparkles: THREE.Points;
   private material: THREE.ShaderMaterial;
-  private size = new THREE.Vector2();
 
   constructor(scene: THREE.Scene) {
     const random = mulberry32(419);
@@ -70,11 +69,11 @@ export class Weather {
     scene.add(this.sparkles);
   }
 
-  update(dt: number, camera: THREE.Camera, renderer: THREE.WebGLRenderer) {
+  /** `viewHeight` is the height of the buffer the scene is drawn into, in its own pixels. */
+  update(dt: number, camera: THREE.Camera, viewHeight: number) {
     const u = this.material.uniforms;
     u.time.value += dt;
     u.focus.value.copy(camera.position);
-    u.viewHeight.value = renderer.getDrawingBufferSize(this.size).y;
-    u.pixelRatio.value = renderer.getPixelRatio();
+    u.viewHeight.value = viewHeight;
   }
 }
