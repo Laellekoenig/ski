@@ -54,12 +54,20 @@ export class Player {
   private spin = 0;
   private sprayAcc = 0;
   private skate = 0;
+  /** Smoothed pose signals for the rider's animation. */
+  private yawRate = 0;
+  private accel = 0;
+  private absorb = 0;
+  private lastHeading = 0;
+  private lastSpeed = 0;
+  private landing = new THREE.Vector3();
   private blob: THREE.Mesh;
   private qa = new THREE.Quaternion();
   private qb = new THREE.Quaternion();
   private fwd = new THREE.Vector3();
   private lat = new THREE.Vector3();
   private tmp = new THREE.Vector3();
+  private qn = new THREE.Vector3();
   private prev = new THREE.Vector3();
 
   constructor(world: World, particles: Particles, trails: Trails) {
@@ -123,6 +131,8 @@ export class Player {
     this.grounded = true;
     this.finished = false;
     this.airTime = this.spin = this.crashTimer = this.tumble = this.steer = this.skid = 0;
+    this.yawRate = this.accel = this.absorb = this.lastSpeed = 0;
+    this.lastHeading = this.heading;
     this.world.terrain.normalAt(this.pos.x, this.pos.z, this.n);
     this.visN.copy(this.n);
     this.trails.break();
@@ -334,10 +344,51 @@ export class Player {
     }
   }
 
+  /** Seconds until the current flight meets the snow; also stores where it lands. */
+  private timeToGround() {
+    const t = this.world.terrain;
+    const p = this.pos, v = this.vel;
+    let s = 0.04;
+    for (; s < 3; s += 0.04) {
+      this.landing.set(p.x + v.x * s, p.y + v.y * s - 0.5 * G * s * s, p.z + v.z * s);
+      if (this.landing.y <= t.heightAt(this.landing.x, this.landing.z)) break;
+    }
+    return s;
+  }
+
   private updateVisuals(dt: number, input: InputState) {
     const root = this.skier.root;
     const crashed = this.state === "crash";
-    const targetN = !this.grounded ? UP : this.n;
+    const t = this.world.terrain;
+    const speed = this.speed;
+    const hv = Math.hypot(this.vel.x, this.vel.z);
+
+    // lateral load from the turn rate: lean in as far as the speed demands
+    let dh = Math.atan2(Math.sin(this.heading - this.lastHeading), Math.cos(this.heading - this.lastHeading));
+    if (Math.abs(dh) > 1) dh = 0; // landed switch and spun round
+    this.lastHeading = this.heading;
+    this.yawRate = lerp(this.yawRate, this.grounded && !crashed ? dh / dt : 0, damp(12, dt));
+    // (the arcade turn rate is tight at low speed, so slow turns lean less than physics would ask)
+    const edge = THREE.MathUtils.clamp(-Math.atan((speed * this.yawRate) / G) * Math.min(0.8, 0.35 + speed / 30), -0.75, 0.75);
+    this.accel = lerp(this.accel, this.grounded ? (speed - this.lastSpeed) / dt : 0, damp(6, dt));
+    this.lastSpeed = speed;
+    // terrain curvature along the line of travel: compressions push up, crests drop away
+    let absorb = 0;
+    if (this.grounded && hv > 2) {
+      const d = 2.5, dx = (this.vel.x / hv) * d, dz = (this.vel.z / hv) * d;
+      const curve = (t.heightAt(this.pos.x + dx, this.pos.z + dz) + t.heightAt(this.pos.x - dx, this.pos.z - dz) - 2 * t.heightAt(this.pos.x, this.pos.z)) / (d * d);
+      absorb = THREE.MathUtils.clamp((hv * hv * curve / G) * 0.35, -0.35, 0.5);
+    }
+    this.absorb = lerp(this.absorb, absorb, damp(10, dt));
+
+    // in the air, keep the skis square to the flight path, then match the slope at the landing
+    const toGround = this.grounded ? 0 : this.timeToGround();
+    const targetN = this.grounded ? this.n : this.tmp.set(-this.vel.y * this.vel.x / Math.max(hv, 1) * 0.5, Math.max(hv, 1), -this.vel.y * this.vel.z / Math.max(hv, 1) * 0.5).normalize();
+    if (!this.grounded && !crashed) {
+      const meet = 1 - THREE.MathUtils.smoothstep(toGround, 0.15, 0.6);
+      targetN.lerp(t.normalAt(this.landing.x, this.landing.z, this.qn), meet).normalize();
+    }
+    if (!this.grounded && crashed) targetN.copy(UP);
     this.visN.lerp(targetN, damp(this.grounded ? 14 : 3, dt)).normalize();
 
     root.position.copy(this.pos);
@@ -361,10 +412,16 @@ export class Player {
       seated: false,
       crashed,
       squash: this.squash,
+      edge: crashed ? 0 : edge,
+      accel: this.accel,
+      absorb: this.absorb,
+      skid: this.skid,
+      airTime: this.airTime,
+      toGround,
+      spin: this.grounded || crashed ? 0 : 6.5 * this.steer,
     });
 
     // blob shadow
-    const t = this.world.terrain;
     const gy = t.heightAt(this.pos.x, this.pos.z);
     const h = this.pos.y - gy;
     this.blob.visible = true;
