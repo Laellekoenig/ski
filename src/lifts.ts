@@ -3,7 +3,7 @@ import type { LiftDef } from "./layout";
 import type { Terrain } from "./terrain";
 import { clay, clayVC } from "./materials";
 import { chairGeometry, stationGeometry, swissFlagMaterial, towerGeometry } from "./props";
-import type { Collider } from "./world";
+interface Collider { x: number; z: number; r: number; top: number }
 
 const CABLE_OFFSET = 2.2;
 const CHAIR_SPACING = 26;

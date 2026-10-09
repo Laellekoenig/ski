@@ -2,66 +2,72 @@
 
 # A Short Ski
 
-A cosy little browser ski game inspired by *A Short Hike*. One permanent Swiss mountain, eight faces, and a web of trails to make your own way down.
+A cosy little browser ski game inspired by *A Short Hike*. One open, snowy mountainside for working on the skiing mechanics. No marked pistes, trees, lifts, buildings, obstacles, or trail map.
 
 ```sh
 bun install
-bun run dev     # http://localhost:5173
+bun run dev     # http://localhost:5173/?silent
 bun run build   # static build in dist/
 ```
 
 ## Controls
 
-The game opens at the summit with all five friends standing behind their skis. Press **1–5** (number row or numpad), use the left/right arrows, or click a name tag: that friend steps forward and waves. Press **Enter** (or the **Let’s ski** button) and they hop onto their skis while the camera swings round behind them. Gamepads can choose with the D-pad or shoulder buttons and start with A or Start.
-
-Meet Beni the Alpine ibex, Mila the Alpine marmot, Lumi the mountain hare, Fynn the red fox, and Nico the chamois. Each has a handmade clay model and colourful ski outfit; all share the same ski physics. Your chosen friend stays with you through jumps, crashes, chairlift rides, and summit resets.
+Choose one of five friends with **1–5**, left/right arrows, or their name tags. Press **Enter** or **Let’s ski** to start. Gamepads can choose with the D-pad or shoulder buttons and start with A or Start.
 
 | Key | Action |
 | --- | --- |
-| `A` / `D` (or arrows) | steer (in the air: spin) |
+| `A` / `D` (or arrows) | steer; spin in the air |
 | `W` | tuck for speed, or skate when slow |
 | `S` | brake / snowplough |
-| `Space` | jump; hold it on a lift to ride faster |
-| `E` | board a lift at its bottom station |
-| `R` | back to the summit |
-| `Tab` | open / close the trail map (pauses skiing) |
-| `Esc` | close the trail map if open; otherwise toggle the pause menu |
-| `P` | toggle the pause menu |
+| `Space` | jump |
+| `R` | restart at the top |
+| `Esc` / `P` | pause |
 | Mouse drag | look around; release to return to the follow camera |
 | `M` | mute |
 
-Add `?silent` to the URL (e.g. `http://localhost:5173/?silent`) to disable audio entirely, which is handy when testing. Automated browsers (`navigator.webdriver`) are always silent.
+Gamepads: left stick steers, A jumps, triggers tuck/brake, Y resets, Start pauses.
 
-Gamepads work too: left stick steers, A jumps, X/B boards the lift, and the triggers tuck/brake.
+Always use `?silent` when testing or taking screenshots. Automated browsers (`navigator.webdriver`) are also silent.
 
-**Score:** distance skied since your last lift ride. Your best run is saved in `localStorage`.
+Distance is counted during each run. The best distance is saved when finishing or resetting.
+
+## Corviglia snowfield
+
+The descent starts at a local elevation of 680 m (~2,486 m above sea level), and ends on a flat snowy shoulder at 340 m (~2,146 m above sea level). The valley is distant scenery and cannot be reached on skis. Press R for another run. The 1.4 km wide practice area uses one snow surface and a steady downhill grade with seeded, irregular rolls, shallow dips, and a gently crowned hill shape. The patterns repeat between runs so changes to the ski mechanics can be compared on the same terrain.
+
+The surrounding mountains and valley now come from **swisstopo’s real 3D terrain**, viewed from Corviglia (46.508484° N, 9.819294° E) toward bearing 145°. The 40 × 40 km background is sampled at 80 m spacing from 39 zoom-11 quantized-mesh tiles, revision 20250101. Geographic positions and relative heights are preserved in a local metre-based projection, without vertical exaggeration. Snow shading is artistic; buildings, vegetation and map imagery are omitted.
+
+The playable hillside has procedural snow rolls on top of a steady downhill grade, blending into the surveyed landscape outside the practice area. Its start and halfway runout stay flat. This is not a surveyed ski route. The terrain’s vertical origin is shifted to keep the existing local physics coordinates; published absolute elevations are approximate, and fine summit detail is reduced by resampling.
+
+The 502 KB heightfield is bundled with the game. Gameplay makes no requests to an external map service and needs no API key.
+
+**Terrain ©swisstopo.** Sources and reuse terms:
+- [Official 3D terrain service](https://docs.geo.admin.ch/visualize-data/terrain-service.html)
+- [swissALTI3D elevation model](https://www.swisstopo.admin.ch/en/height-model-swissalti3d)
+- [Swisstopo open-data terms](https://www.swisstopo.admin.ch/en/terms-of-use-free-geodata-and-geoservices)
+- [Corviglia viewpoint coordinates](https://www.outdooractive.com/en/route/winter-hiking/engadin-st.-moritz/corviglia-marguns/42605153/)
+
+To regenerate the terrain with Python 3 (standard library only):
+
+```sh
+python3 scripts/import-engadine.py
+```
+
+The importer caches downloads in the system temporary directory, decodes the source triangles, and resamples their elevations. It refuses incomplete coverage. `src/data/engadine.json` records the projection, grid, source URLs, revision and SHA-256 checksums. `src/data/engadine.bin` stores little-endian unsigned 16-bit heights in decimetres; that storage precision does not imply decimetre geographic accuracy.
 
 ## Code map
 
-- `src/layout.ts`: the fixed Vierwind layout: routes, connections, lifts, landscapes, jumps and lakes
-- `src/terrain.ts`: heightmap mountain, high-res playable grid plus a coarse far landscape
-- `src/player.ts`: ski physics (carving, friction, airtime, crashes, lifts)
-- `src/skier.ts`: the clay skier model and its procedural animation
-- `src/characters.ts`, `src/animals.ts`: the five mountain friends, outfits, and sculpted animal features
-- `src/lineup.ts`: the opening summit lineup: choosing a friend, stepping forward, and hopping onto the skis
-- `src/world.ts`: sky, lighting, forest, rocks, village, clouds, collisions
-- `src/weather.ts`: the permanent glacier storm, drifting snow and visibility transitions
-- `src/materials.ts`: procedural "thumb-pressed clay" normal maps and rim-lit clay material
+- `src/layout.ts`: start, skiable limits, and halfway stopping point
+- `src/terrain.ts`: continuous snowfield, matching collision heights, and blending into the real landscape
+- `src/engadine.ts`, `src/data/`: bundled terrain loading and geographic elevation sampling
+- `src/world.ts`: clear sky and lighting
+- `src/player.ts`: carving, braking, jumps, landings, and run completion
+- `src/skier.ts`, `src/characters.ts`, `src/animals.ts`: the five clay skiers
+- `src/lineup.ts`: character selection and the transition onto skis
 
-## Vierwind mountain
+## Verification
 
-The 2.64 × 2.64 km map is identical every game. Start at the 640 m summit in the center, turn toward any of eight faces, and press W to push off. The 28 trails include sixteen downhill traverses that join neighboring faces at different elevations. Eight lifts return to the upper mountain; R returns directly to the summit, including during a lift ride.
-
-- **Granite wilds (northwest):** exposed rock ribs, narrow chutes, boulders and optional gap jumps.
-- **Whiteout glacier (northeast):** a persistent snowstorm with gradual visibility changes and a frozen tarn.
-- **Powder gardens (southwest):** pine glades and deep snow with greater drag and powder spray.
-- **Mirror lakes (southeast):** two frozen lakes, shoreline routes and slippery ice.
-
-Orange flags mark fifteen sculpted jump features: rollers, tabletops, gaps with landing banks, and angled hip transfers. Use the trail map to find them and plan connections. Blue/red/black trails indicate increasing difficulty; teal lines connect runs.
-
-## Mountain verification
-
-Run `bun run build` for type checking and the production build. With the dev game loaded, run this in its browser console to check terrain repeatability, all eight departures, all sixteen connections, surface types, jumps, lift boarding/dismounts and summit resets:
+`bun run build` checks TypeScript and builds for production. In the dev browser, verify downhill continuity, snow surfaces, braking, turning, jumping/landing, the halfway endpoint, boundaries, resets, source integrity, and geographic terrain:
 
 ```js
 (await import('/scripts/verify-mountain.mjs')).verifyMountain(game)

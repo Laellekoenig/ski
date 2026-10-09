@@ -11,19 +11,12 @@
 
     <div id="hud" class="hidden" inert>
       <div class="distance"><span id="dist">0</span> m</div>
+      <div class="location">CORVIGLIA <span>Engadine · open snow</span></div>
+      <div class="ski-controls">A / D turn · W tuck · S brake · Space jump · R restart</div>
+      <div id="run-end" role="status" hidden><strong>A little rest above the valley.</strong><span>Halfway down. Back up for another run?</span><span><kbd>R</kbd> back to the top</span></div>
     </div>
 
-    <section id="map-panel" role="dialog" aria-modal="true" aria-labelledby="map-title" hidden>
-      <div class="map-sheet">
-        <header><div><span class="eyebrow">ONE MOUNTAIN. YOUR OWN WAY DOWN.</span><h2 id="map-title">Vierwind trail map</h2></div><button id="close-map" aria-label="Close trail map">✕</button></header>
-        <div class="map-body"><canvas id="trail-map" aria-label="Eight descents from the central summit, connected by sixteen traverses; frozen lakes and jumps marked"></canvas>
-          <aside><p class="map-intro">Start at the center.<br>Follow your curiosity.</p><p>8 faces · 28 trails<br>3 lakes · 15 jumps</p>
-            <div class="map-legend"><span><i class="blue"></i>Easy descent</span><span><i class="red"></i>Steeper descent</span><span><i class="black"></i>Expert chute</span><span><i class="teal"></i>Connecting traverse</span><span><i class="lift"></i>Return lift</span><span><i class="jump"></i>Jump / transfer</span></div>
-            <p class="map-note">The same mountain, every run.<br>Learn a line. Find another.</p><p class="map-note">2.64 × 2.64 km<br>640 m summit</p>
-          </aside></div>
-        <footer><span>Paused · plan your next line</span><span><kbd>Tab</kbd> / <kbd>Esc</kbd> back to the snow</span></footer>
-      </div>
-    </section>
+    <a class="terrain-credit" href="https://www.swisstopo.admin.ch/en/height-model-swissalti3d" target="_blank" rel="noopener noreferrer">Terrain ©swisstopo</a>
 
     <div id="title" aria-label="Choose your skier">
       <div id="lineup-labels" aria-label="Playable characters"></div>
@@ -42,7 +35,7 @@
       </div>
     </div>
 
-    <div id="loading">opening Vierwind mountain…</div>
+    <div id="loading">a little snow above the Engadine…</div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

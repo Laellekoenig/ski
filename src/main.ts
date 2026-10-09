@@ -10,11 +10,19 @@ import { Audio } from "./audio";
 import { PauseMenu } from "./pause";
 import { damp, lerp } from "./noise";
 import { Lineup } from "./lineup";
+import { loadEngadine } from "./engadine";
 
 const BEST_KEY = "a-short-ski.best";
 
 // let the loading text paint before the heavy terrain generation
 await new Promise((r) => requestAnimationFrame(() => setTimeout(r, 0)));
+
+try {
+  await loadEngadine();
+} catch (error) {
+  document.getElementById("loading")!.textContent = "The mountain couldn’t load. Please reload to try again.";
+  throw error;
+}
 
 const canvas = document.getElementById("game") as HTMLCanvasElement;
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: "high-performance" });
@@ -26,7 +34,7 @@ renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.05;
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 
-const camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 0.3, 12000);
+const camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 0.3, 60000);
 
 const world = new World(renderer);
 const particles = new Particles();
@@ -35,7 +43,7 @@ const trails = new Trails(world.terrain);
 world.scene.add(trails.mesh);
 const player = new Player(world, particles, trails);
 const input = new Input();
-const hud = new Hud(world);
+const hud = new Hud();
 const audio = new Audio();
 const pause = new PauseMenu();
 let overlayChanged = false;
@@ -61,21 +69,15 @@ function resetRun() {
 }
 
 function syncOverlays() {
-  const paused = pause.open || hud.mapOpen;
+  const paused = pause.open;
   document.body.classList.toggle("playing", started && !paused);
   document.getElementById("hud")!.inert = !started || paused;
   audio.setPaused(paused);
 }
 
-hud.onMapChange = () => {
-  overlayChanged = true;
-  syncOverlays();
-};
-
 function setPaused(paused: boolean) {
   pause.show(paused);
   overlayChanged = true;
-  if (paused) hud.toggleMap(false);
   syncOverlays();
 }
 
@@ -89,12 +91,7 @@ player.events = {
   onLand: (impact) => audio.land(impact),
   onCrash: () => audio.crash(),
   onTrick: () => audio.trick(),
-  onBoard: (_lift, dist) => {
-    lineup.retire();
-    audio.board();
-    endRun(dist);
-  },
-  onDismount: () => audio.board(),
+  onFinish: endRun,
 };
 
 // ---- camera rig
@@ -186,14 +183,6 @@ function updateCamera(dt: number) {
     const a = lineup.heading + Math.sin(titleTime * 0.25) * 0.14;
     camPos.set(shotFocus.x + Math.sin(a) * shotDist, shotFocus.y + 1.2 + shotDist * 0.1, shotFocus.z + Math.cos(a) * shotDist);
     camLook.copy(shotFocus).y += 0.6;
-  } else if (player.state === "lift" && player.lift) {
-    const l = player.lift;
-    const want = tmpV.copy(p).addScaledVector(l.dir, -6).addScaledVector(l.right, 6.5);
-    want.y += 2.5;
-    camPos.lerp(want, damp(4, dt));
-    camLook.lerp(tmpV.copy(p).addScaledVector(l.dir, 6).add(new THREE.Vector3(0, 1.2, 0)), damp(4, dt));
-    camYaw = Math.atan2(l.dir.x, l.dir.z);
-    camera.fov = lerp(camera.fov, 55, damp(3, dt));
   } else {
     const speed = player.speed;
     // follow the direction of travel when moving, otherwise the way the skis point
@@ -208,9 +197,9 @@ function updateCamera(dt: number) {
     let dy = targetYaw - camYaw;
     dy = Math.atan2(Math.sin(dy), Math.cos(dy));
     camYaw += dy * damp(player.state === "crash" ? 0.5 : 3.2, dt);
-    const summitView = Math.max(0, 1 - Math.hypot(p.x, p.z) / 180);
-    const dist = 5.2 + Math.min(speed, 30) * 0.07 + summitView * 10;
-    const height = 2.3 + Math.min(speed, 30) * 0.025 + summitView * 10;
+    const summitView = Math.max(0, 1 - Math.hypot(p.x, p.z) / 100);
+    const dist = 5.2 + Math.min(speed, 30) * 0.07 + summitView * 1.5;
+    const height = 2.3 + Math.min(speed, 30) * 0.025 + summitView * 1.5;
     const want = tmpV.set(p.x - Math.sin(camYaw) * dist, p.y + height, p.z - Math.cos(camYaw) * dist);
     // the slope ahead is lower: keep the camera above the ground behind us
     const ground = world.terrain.heightAt(want.x, want.z) + 1.6;
@@ -258,7 +247,6 @@ function blendIntro(dt: number) {
 // ---- start / resize
 const lineup = new Lineup(world, particles, {
   onSelect: (character) => {
-    hud.setCharacter(character);
     document.getElementById("title")!.style.setProperty("--selected-color", character.color);
     document.getElementById("character-announcement")!.innerHTML = `<strong>${character.name}</strong><span>${character.species}</span><em>“${character.motto}”</em>`;
     document.getElementById("start-button")!.innerHTML = `Let’s ski, ${character.name}! <kbd>Enter</kbd>`;
@@ -309,10 +297,9 @@ const debug = { freezeCamera: false, pauseSimulation: false };
 const STEP = 1 / 120;
 let acc = 0;
 let last = performance.now();
-let time = 0;
 
 function updateHud() {
-  hud.update(player.runDistance, player.pos.x, player.pos.z, player.heading);
+  hud.update(player.runDistance, player.finished);
 }
 
 function frame(now: number) {
@@ -322,31 +309,24 @@ function frame(now: number) {
 
   input.update();
   const st = input.state;
-  const wasPaused = pause.open || hud.mapOpen;
+  const wasPaused = pause.open;
   if (!started) {
     if (st.characterPressed >= 0) lineup.select(st.characterPressed);
     if (st.characterStep) lineup.step(st.characterStep);
     if (st.startPressed) start();
-    // Confirming the choice must not also jump or board a lift.
+    // Confirming the choice must not also jump.
     st.jumpPressed = st.actionPressed = false;
-  } else if (hud.mapOpen) {
-    // Escape belongs to the map while it is open; P / gamepad Start opens pause.
-    if (st.closeMapPressed || st.mapPressed) hud.toggleMap(false);
-    else if (st.pausePressed) setPaused(true);
-  } else if (started && st.pausePressed) setPaused(!pause.open);
+  } else if (st.pausePressed) setPaused(!pause.open);
   else if (pause.open) pause.update(st);
-  else if (started && st.mapPressed) hud.toggleMap();
   if (st.mutePressed) audio.toggleMute();
 
-  // Freeze both overlays, including their closing frame, so menu input never
-  // spills into jumping/boarding. Refresh the HUD to paint a newly opened map.
-  if (wasPaused || pause.open || hud.mapOpen || overlayChanged) {
+  // Freeze the pause menu and its closing frame so input cannot spill into skiing.
+  if (wasPaused || pause.open || overlayChanged) {
     overlayChanged = false;
     updateHud();
     renderer.render(world.scene, camera);
     return;
   }
-  time += dt;
 
   if (started && !debug.pauseSimulation) {
     if (st.resetPressed) resetRun();
@@ -367,12 +347,12 @@ function frame(now: number) {
   lineup.update(dt, camera, started ? player.pos : undefined);
 
   particles.update(dt);
-  world.update(dt, time, player.pos, particles);
+  world.update(player.pos);
   if (started) updateLook(dt, st);
   if (!debug.freezeCamera) updateCamera(dt);
 
   updateHud();
-  audio.update(player.speed, player.skid, player.grounded, player.state === "lift");
+  audio.update(player.speed, player.skid, player.grounded, false);
 
   renderer.render(world.scene, camera);
 }
@@ -386,11 +366,13 @@ if (import.meta.env.DEV) {
     for (let i = 0; i < n; i++) {
       player.update(STEP, { ...input.state, ...keys, jumpPressed: i === 0 && !!keys.jumpPressed, actionPressed: i === 0 && !!keys.actionPressed });
       particles.update(STEP);
-      world.update(STEP, (time += STEP), player.pos, particles);
+      world.update(player.pos);
       updateLook(STEP, { ...input.state, lookDX: 0, lookDY: 0 });
       updateCamera(STEP);
       sample?.();
     }
+    if (player.pos.distanceTo(lineup.center) > 120) lineup.retire();
+    updateHud();
     renderer.render(world.scene, camera);
   };
   Object.assign(window, { game: { player, world, camera, renderer, input, hud, lineup, sim, snapCamera, debug } });

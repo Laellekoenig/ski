@@ -1,11 +1,11 @@
 // Run in the dev browser: (await import('/scripts/verify-mountain.mjs')).verifyMountain(game)
-// Exercises the actual terrain and fixed-step player, without a second renderer.
+// Exercise the real heightfield and fixed-step ski physics.
 export async function verifyMountain(game) {
-  const { Terrain } = await import('/src/terrain.ts');
-  const { PISTES, KICKERS, LAKES, BOUNDS } = await import('/src/layout.ts');
-  const { stormAt } = await import('/src/weather.ts');
+  const { baseHeight } = await import('/src/terrain.ts');
+  const { ENGADINE, geographicHeight, sampleElevation } = await import('/src/engadine.ts');
+  const { BOUNDS, RUN_END } = await import('/src/layout.ts');
   const { player, world, debug } = game;
-  const terrain = world.terrain;
+  const t = world.terrain;
   const results = [];
   const check = (name, condition) => {
     if (!condition) throw new Error(name);
@@ -16,55 +16,73 @@ export async function verifyMountain(game) {
   const paused = debug.pauseSimulation;
   debug.pauseSimulation = true;
   player.events = {};
+  const step = (seconds, keys = {}) => {
+    for (let i = 0; i < seconds * 120; i++) player.update(1 / 120, { ...input, ...keys, jumpPressed: i === 0 && !!keys.jumpPressed });
+  };
   try {
-    const copy = new Terrain();
-    check('A new terrain has identical heights and routes', terrain.heights.every((h, i) => h === copy.heights[i]) && terrain.pisteDist.every((d, i) => d === copy.pisteDist[i]));
-    for (const mesh of [copy.mesh, copy.farMesh]) { mesh.geometry.dispose(); mesh.material.dispose(); }
-    check('Playable area is over five times larger', (BOUNDS.maxX - BOUNDS.minX) * (BOUNDS.maxZ - BOUNDS.minZ) > 5 * 900 * 1380);
-    for (let face = 0; face < 8; face++) {
-      player.spawnAtSummit();
-      player.heading = Math.PI - face * Math.PI / 4;
-      for (let i = 0; i < 1200; i++) player.update(1 / 120, input);
-      check(`${PISTES[face].name} is reachable downhill from the center`, Math.hypot(player.pos.x, player.pos.z) > 100 && player.pos.y < 600);
+    const response = await fetch('/src/data/engadine.bin');
+    const binary = await response.arrayBuffer();
+    const digest = [...new Uint8Array(await crypto.subtle.digest('SHA-256', binary))].map(v => v.toString(16).padStart(2, '0')).join('');
+    check('Bundled terrain matches its source manifest', response.ok && digest === ENGADINE.sha256 && binary.byteLength === ENGADINE.grid.nx * ENGADINE.grid.nz * 2);
+    check('Corviglia source elevation is plausible', sampleElevation(0, 0) > 2400 && sampleElevation(0, 0) < 2550);
+    check('The Bernina massif rises above 3900 m at its geographic position', sampleElevation(-2488, 15422) > 3900);
+    check('The lake basin lies below Corviglia at its geographic position', sampleElevation(376, 2636) > 1700 && sampleElevation(376, 2636) < 1850);
+    for (const [x, z] of [[-2488, 15422], [-6513, 8954], [376, 2636], [8000, -8000]]) {
+      check('Distant elevations use map data without invented peaks', Math.abs(baseHeight(x, z) - geographicHeight(x, z)) < 0.001);
     }
-    for (const trail of PISTES.filter(p => p.connector)) {
-      const a = trail.points[0], b = trail.points.at(-1);
-      check(`${trail.name} joins two real descents and loses altitude`, [a, b].every(p => PISTES.slice(0, 8).some(t => t.points.some(q => Math.hypot(p.x - q.x, p.z - q.z) < 0.01))) && terrain.heightAt(a.x, a.z) > terrain.heightAt(b.x, b.z));
-    }
-    for (const lake of LAKES) check(`${lake.name} is skiable ice`, terrain.surfaceAt(lake.x, lake.z) === 'ice');
-    check('Powder exists away from the groomed trails', terrain.surfaceAt(-550, 350) === 'powder');
-    check('Storm stays on the glacier face', stormAt(500, -650) > 0.99 && stormAt(-500, 650) === 0 && stormAt(0, 0) === 0);
-    const jumps = [];
-    for (const jump of KICKERS) {
-      player.spawnAtSummit();
-      const dx = Math.sin(jump.heading), dz = Math.cos(jump.heading);
-      player.pos.set(jump.x - dx * (jump.length + 10), 0, jump.z - dz * (jump.length + 10));
-      player.pos.y = terrain.heightAt(player.pos.x, player.pos.z);
-      player.heading = jump.heading;
-      player.vel.set(dx * 23, 0, dz * 23);
-      const normal = terrain.normalAt(player.pos.x, player.pos.z);
-      player.vel.addScaledVector(normal, -player.vel.dot(normal)).normalize().multiplyScalar(23);
-      let air = 0, clearance = 0;
-      for (let i = 0; i < 600; i++) {
-        player.update(1 / 120, input);
-        air = Math.max(air, player.airTime);
-        clearance = Math.max(clearance, player.pos.y - terrain.heightAt(player.pos.x, player.pos.z));
+    for (const x of [-696, 0, 696]) {
+      let previous = t.heightAt(x, 0);
+      for (let z = 0; z <= BOUNDS.maxZ; z += 8) {
+        const h = t.heightAt(x, z);
+        check(`Snowfield descends at ${x}, ${z}`, h <= previous + 0.001 && t.surfaceAt(x, z) === 'snow');
+        check(`Heightfield matches its deterministic mesh at ${x}, ${z}`, Math.abs(h - baseHeight(x, z)) < 0.01);
+        previous = h;
       }
-      check(`${jump.name} produces real airtime`, air > 0.3 && clearance > 0.8 && Number.isFinite(player.pos.y));
-      jumps.push({ name: jump.name, airSeconds: +air.toFixed(2), clearance: +clearance.toFixed(1) });
     }
-    for (const lift of world.lifts) {
-      player.spawnAtSummit();
-      player.pos.copy(lift.bottom);
-      player.update(1 / 120, { ...input, actionPressed: true });
-      check(`${lift.def.name} can be boarded`, player.state === 'lift');
-      player.rideS = lift.rideLength;
-      player.update(1 / 120, input);
-      check(`${lift.def.name} returns to a safe top exit`, player.state === 'ski' && player.grounded && !lift.rideChair.visible && Number.isFinite(player.pos.y));
+    let minGrade = Infinity, maxGrade = -Infinity, reliefRange = 0;
+    for (let x = -696; x <= 696; x += 16) {
+      for (let z = 160; z <= 1000; z += 8) {
+        const grade = (t.heightAt(x, z) - t.heightAt(x, z + 8)) / 8;
+        minGrade = Math.min(minGrade, grade);
+        maxGrade = Math.max(maxGrade, grade);
+        reliefRange = Math.max(reliefRange, Math.abs(t.heightAt(x, z) - t.heightAt(x + 80, z)));
+      }
+    }
+    check('Rolling terrain keeps a steady downhill grade without uphill traps', minGrade > 0.06 && maxGrade < 0.52);
+    check('The hill has substantial height variation across the snow', reliefRange > 5);
+    check('The lower limit stays halfway above the valley', Math.abs(t.heightAt(0, RUN_END) / t.heightAt(0, 0) - 0.5) < 0.01);
+    player.spawnAtSummit();
+    step(12);
+    check('Pushing off reaches the continuous descent', player.pos.z > 100 && player.speed > 10);
+    const speed = player.speed;
+    step(3, { tuck: false, brake: true });
+    check('Braking slows the skier', player.speed < speed * 0.5);
+    player.spawnAt(0, 250, 0);
+    step(4);
+    step(0.25, { jumpPressed: true });
+    check('Jump leaves the snow', !player.grounded && player.pos.y > t.heightAt(player.pos.x, player.pos.z) + 0.5);
+    step(2);
+    check('Jump lands safely', player.grounded && player.state === 'ski');
+    player.spawnAt(0, 250, 0);
+    step(3);
+    step(0.7, { steer: 0.6 });
+    check('Steering changes heading and carves across the snow', player.heading < -0.3 && player.pos.x < -1);
+    let finishes = 0;
+    player.events = { onFinish: () => finishes++ };
+    player.spawnAtSummit();
+    step(140);
+    check('A full descent ends on the shoulder', player.finished && player.pos.z >= RUN_END && player.pos.z <= BOUNDS.maxZ && player.pos.y >= 339);
+    const end = player.pos.clone();
+    step(10, { jumpPressed: true });
+    check('The valley cannot be entered after finishing', player.pos.equals(end) && player.speed === 0 && finishes === 1);
+    for (const [x, z, heading] of [[699, 300, Math.PI / 2], [-699, 300, -Math.PI / 2], [0, -34, Math.PI]]) {
+      player.spawnAt(x, z, heading);
+      step(5);
+      check('Side and uphill limits keep skiing within the snowfield', player.pos.x >= BOUNDS.minX && player.pos.x <= BOUNDS.maxX && player.pos.z >= BOUNDS.minZ);
     }
     player.spawnAtSummit();
-    check('Reset returns to the exact central summit', player.pos.x === 0 && player.pos.z === 0 && player.pos.y === 640 && player.speed === 0);
-    return { passed: results.length, results, jumps };
+    check('Reset clears the finish and returns to the start', !player.finished && player.pos.x === 0 && player.pos.z === 0 && player.pos.y === 680 && player.speed === 0);
+    return { passed: results.length, hill: { minGrade, maxGrade, reliefRange }, mechanics: results.slice(-12) };
   } finally {
     player.events = events;
     player.spawnAtSummit();
