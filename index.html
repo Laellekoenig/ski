@@ -10,15 +10,15 @@
     <canvas id="game"></canvas>
 
     <div id="hud" class="hidden" inert>
-      <div class="distance"><span id="dist">0</span> m</div>
-      <div id="run-end" role="status" hidden><strong>A little rest above the valley.</strong><span>Halfway down. Back up for another run?</span><span><kbd>R</kbd> back to the top</span></div>
+      <div class="distance"><span id="dist">0</span><span class="unit">m</span></div>
+      <div id="run-end" role="status" hidden><span>Finish</span><kbd>R</kbd></div>
     </div>
 
     <div id="title" aria-label="Choose your skier">
       <div id="lineup-labels" aria-label="Playable characters"></div>
       <div class="title-panel">
-        <p id="character-announcement" aria-live="polite" aria-atomic="true"></p>
-        <button id="start-button" type="button">Let’s ski, Beni! <kbd>Enter</kbd></button>
+        <p id="character-announcement" class="sr-only" aria-live="polite" aria-atomic="true"></p>
+        <button id="start-button" type="button">Start <kbd>Enter</kbd></button>
       </div>
     </div>
 
@@ -26,12 +26,11 @@
       <div class="pause-card">
         <h2>Paused</h2>
         <button data-choice="continue">Continue</button>
-        <button data-choice="reset">Reset run</button>
-        <p class="hint"><kbd>Esc</kbd> to keep skiing</p>
+        <button data-choice="reset">Restart</button>
       </div>
     </div>
 
-    <div id="loading">a little snow above the Engadine…</div>
+    <div id="loading">Loading</div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>
