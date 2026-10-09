@@ -12,6 +12,7 @@ import { PauseMenu } from "./pause";
 import { damp, lerp } from "./noise";
 import { Lineup } from "./lineup";
 import { loadEngadine } from "./engadine";
+import { RetroFilter } from "./retro";
 
 const BEST_KEY = "a-short-ski.best";
 
@@ -26,7 +27,7 @@ try {
 }
 
 const canvas = document.getElementById("game") as HTMLCanvasElement;
-const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: "high-performance" });
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: "high-performance" });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.shadowMap.enabled = true;
@@ -34,6 +35,7 @@ renderer.shadowMap.type = THREE.PCFShadowMap;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.05;
 renderer.outputColorSpace = THREE.SRGBColorSpace;
+const retro = new RetroFilter(renderer);
 
 const camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 0.3, 60000);
 
@@ -284,6 +286,7 @@ function start(instant = false) {
 window.addEventListener("resize", () => {
   camera.aspect = window.innerWidth / window.innerHeight;
   renderer.setSize(window.innerWidth, window.innerHeight);
+  retro.resize();
 });
 
 document.getElementById("loading")!.style.opacity = "0";
@@ -321,7 +324,7 @@ function frame(now: number) {
   if (wasPaused || pause.open || overlayChanged) {
     overlayChanged = false;
     updateHud();
-    renderer.render(world.scene, camera);
+    retro.render(world.scene, camera);
     return;
   }
 
@@ -347,12 +350,12 @@ function frame(now: number) {
   world.update(player.pos, dt);
   if (started) updateLook(dt, st);
   if (!debug.freezeCamera) updateCamera(dt);
-  weather.update(dt, camera, renderer);
+  weather.update(dt, camera, retro.size.y);
 
   updateHud();
   audio.update(player.speed, player.skid, player.grounded, false);
 
-  renderer.render(world.scene, camera);
+  retro.render(world.scene, camera, dt);
 }
 requestAnimationFrame(frame);
 
@@ -371,7 +374,7 @@ if (import.meta.env.DEV) {
     }
     if (player.pos.distanceTo(lineup.center) > 120) lineup.retire();
     updateHud();
-    renderer.render(world.scene, camera);
+    retro.render(world.scene, camera);
   };
   Object.assign(window, { game: { player, world, weather, camera, renderer, input, hud, lineup, sim, snapCamera, debug } });
 }
