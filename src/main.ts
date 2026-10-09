@@ -7,6 +7,7 @@ import { Player } from "./player";
 import { Input, type InputState } from "./input";
 import { Hud } from "./hud";
 import { Audio } from "./audio";
+import { HikeEffect } from "./hike-effect";
 import { damp, lerp } from "./noise";
 
 const BEST_KEY = "a-short-ski.best";
@@ -15,7 +16,7 @@ const BEST_KEY = "a-short-ski.best";
 await new Promise((r) => requestAnimationFrame(() => setTimeout(r, 0)));
 
 const canvas = document.getElementById("game") as HTMLCanvasElement;
-const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: "high-performance" });
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: "high-performance" });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.shadowMap.enabled = true;
@@ -27,6 +28,7 @@ renderer.outputColorSpace = THREE.SRGBColorSpace;
 const camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 0.3, 12000);
 
 const world = new World(renderer);
+const effect = new HikeEffect(renderer, window.innerWidth, window.innerHeight);
 const particles = new Particles();
 world.scene.add(particles.mesh);
 const trails = new Trails(world.terrain);
@@ -191,6 +193,7 @@ function start() {
 window.addEventListener("resize", () => {
   camera.aspect = window.innerWidth / window.innerHeight;
   renderer.setSize(window.innerWidth, window.innerHeight);
+  effect.setSize(window.innerWidth, window.innerHeight);
 });
 
 document.getElementById("loading")!.style.opacity = "0";
@@ -247,7 +250,7 @@ function frame(now: number) {
   hud.update(player.runDistance, best, player.speed, started ? prompt : "", player.pos.x, player.pos.z, player.heading);
   audio.update(player.speed, player.skid, player.grounded, player.state === "lift");
 
-  renderer.render(world.scene, camera);
+  effect.render(world.scene, camera);
 }
 requestAnimationFrame(frame);
 
@@ -265,7 +268,7 @@ if (import.meta.env.DEV) {
       updateCamera(STEP);
       sample?.();
     }
-    renderer.render(world.scene, camera);
+    effect.render(world.scene, camera);
   };
-  Object.assign(window, { game: { player, world, camera, renderer, input, sim, snapCamera, debug } });
+  Object.assign(window, { game: { player, world, camera, renderer, effect, input, sim, snapCamera, debug } });
 }

@@ -34,3 +34,4 @@ Gamepads work too: left stick steers, A jumps, X/B boards the lift, and the trig
 - `src/skier.ts`: the clay skier model and its procedural animation
 - `src/world.ts`: sky, lighting, forest, rocks, village, clouds, collisions
 - `src/materials.ts`: procedural "thumb-pressed clay" normal maps and rim-lit clay material
+- `src/hike-effect.ts`: low-resolution world rendering, warm colour grading, depth outlines and subtle ordered dithering; the HUD stays at full resolution
