@@ -265,3 +265,71 @@ kbd {
   background: #cfe4f7;
   transition: opacity 0.6s;
 }
+
+#pause {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: opacity 0.2s;
+  background: rgba(43, 47, 69, 0.28);
+  backdrop-filter: blur(3px);
+}
+.pause-card {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 12px;
+  min-width: 280px;
+  text-align: center;
+  background: var(--card);
+  padding: 24px 34px 20px;
+  border-radius: 32px;
+  box-shadow:
+    0 10px 0 rgba(43, 47, 69, 0.15),
+    0 20px 60px rgba(43, 47, 69, 0.2);
+  transition: transform 0.25s cubic-bezier(0.3, 1.6, 0.5, 1);
+}
+#pause.hidden .pause-card {
+  transform: scale(0.9);
+}
+.pause-card h2 {
+  margin: 0 0 6px;
+  font-size: 44px;
+  font-weight: 600;
+  color: var(--red);
+  -webkit-text-stroke: 2px #fff;
+  paint-order: stroke fill;
+}
+.pause-card button {
+  font: inherit;
+  font-size: 22px;
+  font-weight: 600;
+  color: var(--ink);
+  background: #fff;
+  border: none;
+  border-radius: 999px;
+  padding: 10px 24px;
+  cursor: pointer;
+  box-shadow: 0 5px 0 rgba(43, 47, 69, 0.15);
+  transition:
+    transform 0.15s cubic-bezier(0.3, 1.6, 0.5, 1),
+    background 0.15s,
+    color 0.15s;
+}
+.pause-card button.selected {
+  background: var(--red);
+  color: #fff;
+  transform: scale(1.05);
+  box-shadow: 0 5px 0 rgba(150, 35, 33, 0.45);
+}
+.pause-card button:active {
+  transform: translateY(3px) scale(1.02);
+  box-shadow: 0 2px 0 rgba(150, 35, 33, 0.45);
+}
+.pause-card .hint {
+  margin: 4px 0 0;
+  font-size: 15px;
+  opacity: 0.65;
+}

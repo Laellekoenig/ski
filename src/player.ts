@@ -106,6 +106,8 @@ export class Player {
     this.vel.set(Math.sin(this.heading), 0, Math.cos(this.heading)).multiplyScalar(2);
     this.state = "ski";
     this.grounded = true;
+    // also covers resetting mid-ride from the pause menu
+    if (this.lift) this.lift.rideChair.visible = false;
     this.lift = null;
     this.trails.break();
   }
@@ -139,7 +141,6 @@ export class Player {
     this.pos.y -= 2.82;
     this.vel.set(0, 0, 0);
     if (this.rideS >= lift.rideLength) {
-      lift.rideChair.visible = false;
       this.spawnAtTop(lift);
       this.squash = 0.4;
       this.events.onDismount?.(lift);

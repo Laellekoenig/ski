@@ -67,6 +67,12 @@ export class Audio {
     if (this.ctx) this.master.gain.setTargetAtTime(this.muted ? 0 : 0.7, this.ctx.currentTime, 0.05);
   }
 
+  /** Freeze all sound while the game is paused. */
+  setPaused(paused: boolean) {
+    if (!this.ctx) return;
+    void (paused ? this.ctx.suspend() : this.ctx.resume());
+  }
+
   update(speed: number, skid: number, grounded: boolean, onLift: boolean) {
     if (!this.ctx) return;
     const t = this.ctx.currentTime;

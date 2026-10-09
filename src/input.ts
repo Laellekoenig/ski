@@ -10,6 +10,11 @@ export interface InputState {
   actionPressed: boolean;
   resetPressed: boolean;
   mutePressed: boolean;
+  pausePressed: boolean;
+  /** pause menu navigation, edge-triggered */
+  menuUp: boolean;
+  menuDown: boolean;
+  confirmPressed: boolean;
   anyPressed: boolean;
   /** mouse drag-to-look: held, plus pixels moved since last frame */
   looking: boolean;
@@ -40,6 +45,10 @@ export class Input {
     actionPressed: false,
     resetPressed: false,
     mutePressed: false,
+    pausePressed: false,
+    menuUp: false,
+    menuDown: false,
+    confirmPressed: false,
     anyPressed: false,
     looking: false,
     lookDX: 0,
@@ -96,6 +105,10 @@ export class Input {
     let actionPressed = this.pressed.has("KeyE") || this.pressed.has("Enter");
     let resetPressed = this.pressed.has("KeyR");
     const mutePressed = this.pressed.has("KeyM");
+    let pausePressed = this.pressed.has("Escape") || this.pressed.has("KeyP");
+    let menuUp = UP.some((c) => this.pressed.has(c));
+    let menuDown = DOWN.some((c) => this.pressed.has(c));
+    let confirmPressed = jumpPressed || actionPressed;
     let anyPressed = this.pressed.size > 0;
 
     const pad = navigator.getGamepads?.().find((p) => p && p.connected);
@@ -110,6 +123,10 @@ export class Input {
       jumpPressed ||= edge(0);
       actionPressed ||= edge(2) || edge(1);
       resetPressed ||= edge(3);
+      pausePressed ||= edge(9);
+      menuUp ||= edge(12);
+      menuDown ||= edge(13);
+      confirmPressed ||= edge(0);
       anyPressed ||= pad.buttons.some((_, i) => edge(i));
       this.padPrev = pad.buttons.map((x) => x.pressed);
     }
@@ -122,6 +139,10 @@ export class Input {
     s.actionPressed = actionPressed;
     s.resetPressed = resetPressed;
     s.mutePressed = mutePressed;
+    s.pausePressed = pausePressed;
+    s.menuUp = menuUp;
+    s.menuDown = menuDown;
+    s.confirmPressed = confirmPressed;
     s.anyPressed = anyPressed;
     s.looking = this.dragId !== null;
     s.lookDX = this.dragX;
