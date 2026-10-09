@@ -7,6 +7,7 @@ import { Player } from "./player";
 import { Input, type InputState } from "./input";
 import { Hud } from "./hud";
 import { Audio } from "./audio";
+import { PauseMenu } from "./pause";
 import { damp, lerp } from "./noise";
 
 const BEST_KEY = "a-short-ski.best";
@@ -35,6 +36,7 @@ const player = new Player(world, particles, trails);
 const input = new Input();
 const hud = new Hud(world);
 const audio = new Audio();
+const pause = new PauseMenu();
 
 let best = Number(localStorage.getItem(BEST_KEY) ?? 0) || 0;
 const summitLift = world.lifts[0];
@@ -50,6 +52,23 @@ function endRun(distance: number) {
     hud.toast(`Run: ${Math.floor(distance).toLocaleString("en-US")} m`, "info");
   }
 }
+
+function resetRun() {
+  endRun(player.runDistance);
+  player.runDistance = 0;
+  player.spawnAtTop(summitLift);
+  snapCamera();
+}
+
+function setPaused(paused: boolean) {
+  pause.show(paused);
+  audio.setPaused(paused);
+}
+
+pause.onChoose = (choice) => {
+  setPaused(false);
+  if (choice === "reset") resetRun();
+};
 
 player.events = {
   onJump: () => audio.jump(),
@@ -207,20 +226,24 @@ function frame(now: number) {
   requestAnimationFrame(frame);
   const dt = Math.min(0.05, (now - last) / 1000);
   last = now;
-  time += dt;
 
   input.update();
   const st = input.state;
+  const wasPaused = pause.open;
   if (!started && st.anyPressed) start();
+  else if (started && st.pausePressed) setPaused(!pause.open);
+  else if (pause.open) pause.update(st);
   if (st.mutePressed) audio.toggleMute();
 
+  // frozen while the menu is up; also skip the closing frame so its keypress doesn't jump/board
+  if (wasPaused || pause.open) {
+    renderer.render(world.scene, camera);
+    return;
+  }
+  time += dt;
+
   if (started) {
-    if (st.resetPressed && player.state !== "lift") {
-      endRun(player.runDistance);
-      player.runDistance = 0;
-      player.spawnAtTop(summitLift);
-      snapCamera();
-    }
+    if (st.resetPressed && player.state !== "lift") resetRun();
     acc += dt;
     let first = true;
     while (acc >= STEP) {
