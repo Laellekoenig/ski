@@ -10,7 +10,7 @@ bun run dev     # http://localhost:5173/?silent
 bun run build   # static build in dist/
 ```
 
-The riders use a restrained, early-2000s console style: human proportions, low-poly technical clothing, mirrored goggles, helmets, balaclavas and no exposed skin. Beni and Fynn are male; Mila and Lumi are female. Each has a distinct silhouette, outfit palette and equipment setup.
+The riders look like PS2-era characters: smooth, rounded bodies, painted faces and loud early-2000s outfits. Beni wears a flame jacket, a knit beanie with a wild shock of red fake hair and shades on the back of his head; Mila a bubblegum puffer, fluffy earmuffs and white sunglasses; Fynn an acid-green tall tee, camo cargos and a backwards flat-brim cap over frosted tips; Lumi a colour-block one-piece, a helmet with a faux-fur mohawk and braids. Beni and Fynn are male; Mila and Lumi are female. Each has a distinct silhouette, colour and equipment setup.
 
 ## Controls
 
@@ -71,7 +71,8 @@ The importer caches downloads in the system temporary directory, decodes the sou
 - `src/world.ts`: winter sky with thin drifting clouds, atmospheric haze, and lighting
 - `src/weather.ts`: sparse, subtle diamond dust (the snow reflections live in `src/materials.ts`)
 - `src/player.ts`: carving, ducking, braking, swings, jumps, landings, and run completion
-- `src/skier.ts`, `src/characters.ts`, `src/gear.ts`, `src/equipment.ts`: four fully equipped human skiers, articulated clothing, shaped skis and bindings
+- `src/skier.ts`, `src/characters.ts`, `src/gear.ts`, `src/equipment.ts`: four articulated skiers with smooth lathed and lofted bodies, shaped skis and bindings
+- `src/looks.ts`: printed outfits, painted faces, hair and headwear
 - `src/lineup.ts`: character selection and the transition onto skis
 
 ## Verification
