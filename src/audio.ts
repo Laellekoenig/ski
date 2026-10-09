@@ -9,9 +9,12 @@ export class Audio {
   private humGain!: GainNode;
   private noise!: AudioBuffer;
   muted = false;
+  /** Automated test browsers and `?silent` URLs never create an audio context, so nothing plays. */
+  readonly silent = navigator.webdriver || new URLSearchParams(location.search).has("silent");
 
   /** Must be called from a user gesture. */
   start() {
+    if (this.silent) return;
     if (this.ctx) {
       void this.ctx.resume();
       return;
