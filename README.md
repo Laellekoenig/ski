@@ -20,6 +20,7 @@ Choose one of four human riders with **1–4**, left/right arrows, or their name
 | --- | --- |
 | `A` / `D` (or arrows) | steer; spin in the air |
 | `W` | tuck for speed, or skate when slow |
+| `Shift` (hold) | duck into a low racing tuck: faster, but steering is cut to about a third |
 | `S` | brake / snowplough |
 | `Space` | jump |
 | `R` | restart at the top |
@@ -27,7 +28,7 @@ Choose one of four human riders with **1–4**, left/right arrows, or their name
 | Mouse drag | look around; release to return to the follow camera |
 | `M` | mute |
 
-Gamepads: left stick steers, A jumps, triggers tuck/brake, Y resets, Start pauses.
+Gamepads: left stick steers, A jumps, triggers tuck/brake, right bumper ducks, Y resets, Start pauses.
 
 Always use `?silent` when testing or taking screenshots. Automated browsers (`navigator.webdriver`) are also silent.
 
@@ -67,7 +68,7 @@ The importer caches downloads in the system temporary directory, decodes the sou
 - `src/engadine.ts`, `src/data/`: bundled terrain loading and geographic elevation sampling
 - `src/world.ts`: winter sky with thin drifting clouds, atmospheric haze, and lighting
 - `src/weather.ts`: sparse, subtle diamond dust (the snow reflections live in `src/materials.ts`)
-- `src/player.ts`: carving, braking, jumps, landings, and run completion
+- `src/player.ts`: carving, ducking, braking, jumps, landings, and run completion
 - `src/skier.ts`, `src/characters.ts`, `src/gear.ts`, `src/equipment.ts`: four fully equipped human skiers, articulated clothing, shaped skis and bindings
 - `src/lineup.ts`: character selection and the transition onto skis
 

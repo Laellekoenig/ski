@@ -13,6 +13,9 @@ const MU = 0.08;
 /** Quadratic air drag per metre (≈ ½ρC_dA/m), upright and tucked. */
 const DRAG = 0.011;
 const DRAG_TUCK = 0.0068;
+/** Shift's low racing crouch: even less drag, at the cost of most of the steering. */
+const DRAG_DUCK = 0.0042;
+const DUCK_STEER = 0.3;
 /** Share of the sideways kinetic energy an edge carves back into forward speed. */
 const CARVE_KEEP = 0.85;
 /** Skating: push strength from standstill, fading out by this speed. */
@@ -65,6 +68,7 @@ export class Player {
   private spin = 0;
   private sprayAcc = 0;
   private skate = 0;
+  private ducking = false;
   /** Smoothed pose signals for the rider's animation. */
   private yawRate = 0;
   private accel = 0;
@@ -150,7 +154,8 @@ export class Player {
   }
 
   update(dt: number, input: InputState) {
-    this.steer = lerp(this.steer, input.steer, damp(10, dt));
+    this.ducking = input.duck && !input.brake && this.state !== "crash" && !this.finished;
+    this.steer = lerp(this.steer, input.steer * (this.ducking ? DUCK_STEER : 1), damp(10, dt));
     this.squash = Math.max(0, this.squash - dt * 2.5);
 
     if (!this.finished) this.updateSki(dt, input);
@@ -222,12 +227,12 @@ export class Player {
           vf *= f;
           vl *= f;
         }
-        const drag = (tuck ? DRAG_TUCK : DRAG);
+        const drag = this.ducking ? DRAG_DUCK : tuck ? DRAG_TUCK : DRAG;
         vf -= Math.sign(vf) * drag * vf * vf * dt;
 
         // skating / pushing off: only gets you going on the flat, it can't beat
         // gravity up a real slope or keep pushing once the skis are running
-        const skating = tuck && vf < SKATE_MAX;
+        const skating = tuck && !this.ducking && vf < SKATE_MAX;
         this.skate = lerp(this.skate, skating ? 1 : 0, damp(6, dt));
         if (skating) {
           const flat = 1 - smoothstep(0, SKATE_MAX_GRADE, this.fwd.y);
@@ -250,7 +255,7 @@ export class Player {
       this.airTime += dt;
       this.vel.y -= G * dt;
       const airSpeed = this.vel.length();
-      this.vel.multiplyScalar(Math.max(0, 1 - (input.tuck ? DRAG_TUCK : DRAG) * airSpeed * dt));
+      this.vel.multiplyScalar(Math.max(0, 1 - (this.ducking ? DRAG_DUCK : input.tuck ? DRAG_TUCK : DRAG) * airSpeed * dt));
       if (!crashed) {
         const spinRate = 6.5 * this.steer;
         this.heading -= spinRate * dt;
@@ -424,7 +429,8 @@ export class Player {
     this.skier.update(dt, {
       speed: this.speed,
       turn: crashed ? 0 : this.steer,
-      tuck: input.tuck && this.skate < 0.5 && !crashed,
+      tuck: (input.tuck || this.ducking) && this.skate < 0.5 && !crashed,
+      duck: this.ducking,
       brake: input.brake && !crashed,
       air: !this.grounded && this.airTime > 0.1,
       skate: this.skate,
