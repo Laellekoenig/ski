@@ -1,24 +1,53 @@
-export type Species = "ibex" | "marmot" | "hare" | "fox" | "chamois";
+export type RiderId = "beni" | "mila" | "fynn" | "lumi";
+export type Outfit = "freeride" | "race" | "park" | "alpine";
 
 export interface Character {
-  id: Species;
+  id: RiderId;
   name: string;
-  species: string;
+  gender: "male" | "female";
+  discipline: string;
   motto: string;
   color: string;
-  fur: number;
-  cream: number;
+  kit: string;
   jacket: number;
+  panel: number;
   pants: number;
-  hat: number;
+  helmet: number;
+  accent: number;
+  lens: number;
   skis: number;
+  outfit: Outfit;
+  height: number;
 }
 
-/** The same cast and colours are used by the picker and the playable models. */
+/** Two men and two women, each with a complete, recognisable equipment setup. */
 export const CHARACTERS: readonly Character[] = [
-  { id: "ibex", name: "Beni", species: "Alpine ibex", motto: "Big horns. Bigger mountain days.", color: "#168c87", fur: 0xa68b70, cream: 0xf6dfb7, jacket: 0x22b9ac, pants: 0x64489a, hat: 0xffa155, skis: 0xff6578 },
-  { id: "marmot", name: "Mila", species: "Alpine marmot", motto: "Out of hibernation. Into the powder.", color: "#d95862", fur: 0xb17b4f, cream: 0xffd5a0, jacket: 0xf76676, pants: 0x375d88, hat: 0x64d7c5, skis: 0xffc74b },
-  { id: "hare", name: "Lumi", species: "Mountain hare", motto: "A little hop. A whole lot of happy.", color: "#8a62c3", fur: 0xf6f4ed, cream: 0xffffff, jacket: 0xb49aef, pants: 0x755498, hat: 0xffce55, skis: 0x4fcabd },
-  { id: "fox", name: "Fynn", species: "Red fox", motto: "First tracks. A little mischief.", color: "#397fc2", fur: 0xe78c3e, cream: 0xffebc8, jacket: 0x448ee4, pants: 0xffbf48, hat: 0xff789e, skis: 0x63d6be },
-  { id: "chamois", name: "Nico", species: "Chamois", motto: "Sure feet. Sunny-side adventures.", color: "#b6811e", fur: 0x725744, cream: 0xedd3a1, jacket: 0xffc543, pants: 0xde6a7b, hat: 0x609edc, skis: 0x8a7fe0 },
+  {
+    id: "beni", name: "Beni", gender: "male", discipline: "Freeride",
+    motto: "Find your own line.", kit: "Forest shell / sand cargo / copper mirror",
+    color: "#456454", jacket: 0x324f43, panel: 0x202c29, pants: 0xafa18a,
+    helmet: 0x262c2b, accent: 0xdb8c42, lens: 0xc7833f, skis: 0x384b3f,
+    outfit: "freeride", height: 1.04,
+  },
+  {
+    id: "mila", name: "Mila", gender: "female", discipline: "Piste",
+    motto: "Hold the edge. Own the turn.", kit: "Chalk shell / vermilion bib / smoke mirror",
+    color: "#b24b33", jacket: 0xe6e2d7, panel: 0xc65335, pants: 0x943924,
+    helmet: 0xe3e1d8, accent: 0xe86d3e, lens: 0x697f98, skis: 0xb84d31,
+    outfit: "race", height: 0.98,
+  },
+  {
+    id: "fynn", name: "Fynn", gender: "male", discipline: "Park",
+    motto: "Make every hit count.", kit: "Cobalt anorak / graphite cargo / ice mirror",
+    color: "#3a66a0", jacket: 0x284f8c, panel: 0x182c48, pants: 0x292c32,
+    helmet: 0x151b25, accent: 0xb7d7e6, lens: 0x6ea7bc, skis: 0x263d61,
+    outfit: "park", height: 1.02,
+  },
+  {
+    id: "lumi", name: "Lumi", gender: "female", discipline: "Backcountry",
+    motto: "Go where the tracks end.", kit: "Plum shell / glacier bib / rose mirror",
+    color: "#765970", jacket: 0x604155, panel: 0x392f40, pants: 0xc9cfd0,
+    helmet: 0xb8c6c9, accent: 0xcba18e, lens: 0xad7687, skis: 0x756073,
+    outfit: "alpine", height: 1,
+  },
 ];

@@ -248,9 +248,6 @@ function blendIntro(dt: number) {
 
 // ---- start / resize
 const lineup = new Lineup(world, particles, {
-  onSelect: (character) => {
-    document.getElementById("character-announcement")!.textContent = `${character.name}, ${character.species}`;
-  },
   onHop: () => audio.jump(),
   onLand: (skier, at, heading) => {
     audio.land(4);
@@ -269,7 +266,6 @@ const lineup = new Lineup(world, particles, {
     syncOverlays();
   },
 });
-document.getElementById("start-button")!.addEventListener("click", () => start());
 
 /** Enter on the title: the chosen friend hops onto its skis, and the run begins on landing. */
 function start(instant = false) {

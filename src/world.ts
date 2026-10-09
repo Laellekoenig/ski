@@ -20,7 +20,7 @@ export class World {
     scene.fog = new THREE.Fog(0xc0d4e7, 6000, 38000);
     this.sky = this.makeSky(true);
     scene.add(this.sky);
-    // Image based lighting from the sky for soft clay shading
+    // Sky reflections light the snow and the riders' hard equipment.
     const pmrem = new THREE.PMREMGenerator(renderer);
     const envScene = new THREE.Scene();
     envScene.add(this.makeSky(false));
