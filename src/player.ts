@@ -9,13 +9,14 @@ import type { Trails } from "./trails";
 import { BOUNDS, KICKERS, SUMMIT } from "./layout";
 import type { Surface } from "./terrain";
 import { damp, lerp } from "./noise";
-import type { Character } from "./characters";
 
 const G = 9.81;
 const MU = { piste: 0.04, snow: 0.08, ice: 0.006, powder: 0.19, rock: 0.11 };
 const DRAG = 0.0095;
 const DRAG_TUCK = 0.0058;
 const BOARD_RADIUS = 13;
+/** Runs start facing south-east, toward the Mirror lakes. */
+export const START_HEADING = Math.PI / 4;
 
 export type PlayerState = "ski" | "crash" | "lift";
 
@@ -95,21 +96,31 @@ export class Player {
     return this.vel.length();
   }
 
-  selectCharacter(character: Character) {
-    if (this.skier.character.id === character.id) return;
-    const previous = this.skier;
-    this.skier = new Skier(character);
-    this.skier.root.position.copy(previous.root.position);
-    this.skier.root.quaternion.copy(previous.root.quaternion);
-    this.world.scene.remove(previous.root);
-    previous.dispose();
-    this.world.scene.add(this.skier.root);
+  /** Take over a skier that is already in the scene, e.g. the one picked from the lineup. */
+  adoptSkier(skier: Skier, squash = 0) {
+    if (skier !== this.skier) {
+      this.world.scene.remove(this.skier.root);
+      this.skier.dispose();
+      this.skier = skier;
+      skier.skis = true;
+      this.world.scene.add(skier.root);
+    }
+    this.squash = squash;
+  }
+
+  /** Hide the skier and its blob shadow, e.g. while the lineup is on stage. */
+  set visible(visible: boolean) {
+    this.skier.root.visible = this.blob.visible = visible;
   }
 
   /** Every new run starts at the same central peak, ready to choose a face. */
   spawnAtSummit() {
-    this.pos.set(SUMMIT.x, this.world.terrain.heightAt(SUMMIT.x, SUMMIT.z), SUMMIT.z);
-    this.heading = Math.PI / 4;
+    this.spawnAt(SUMMIT.x, SUMMIT.z, START_HEADING);
+  }
+
+  spawnAt(x: number, z: number, heading: number) {
+    this.pos.set(x, this.world.terrain.heightAt(x, z), z);
+    this.heading = heading;
     this.resetMotion();
     this.vel.set(0, 0, 0);
   }
@@ -148,12 +159,6 @@ export class Player {
     if (this.state === "lift") this.updateLift(dt, input);
     else this.updateSki(dt, input);
 
-    this.updateVisuals(dt, input);
-  }
-
-  /** Title screen: stand still, just animate. */
-  idle(dt: number, input: InputState) {
-    this.vel.set(0, 0, 0);
     this.updateVisuals(dt, input);
   }
 
