@@ -355,7 +355,7 @@ function frame(now: number) {
   updateHud();
   audio.update(player.speed, player.skid, player.grounded, false);
 
-  retro.render(world.scene, camera, dt);
+  retro.render(world.scene, camera);
 }
 requestAnimationFrame(frame);
 

@@ -2,7 +2,8 @@ import * as THREE from "three";
 import { Terrain } from "./terrain";
 import { SUMMIT } from "./layout";
 
-export const SUN_DIR = new THREE.Vector3(-0.45, 0.72, 0.53).normalize();
+// A low winter sun (~31°) rakes across the snow so its rolls cast readable light and shade.
+export const SUN_DIR = new THREE.Vector3(-0.6, 0.52, 0.62).normalize();
 export const SKY_TOP = new THREE.Color(0x487cad);
 export const SKY_HORIZON = new THREE.Color(0xc0d4e7);
 

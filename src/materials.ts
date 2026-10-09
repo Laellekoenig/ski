@@ -110,9 +110,17 @@ const GLINT_CHUNK = /* glsl */ `
   }
 `;
 
-/** Lets sunlit snow glitter. */
+const SNOW_LIGHT_CHUNK = /* glsl */ `
+  #include <lights_fragment_end>
+  // Skylight fills white snow so evenly that its rolls vanish: keep it cool and dim, and let the sun model the shapes.
+  reflectedLight.indirectDiffuse *= vec3(0.5, 0.58, 0.8);
+  reflectedLight.directDiffuse *= 1.1;
+`;
+
+/** Lets sunlit snow glitter, with shading that keeps its relief readable. */
 export function addSnowGlints(mat: THREE.MeshStandardMaterial) {
   mat.onBeforeCompile = (shader) => {
+    shader.fragmentShader = shader.fragmentShader.replace("#include <lights_fragment_end>", SNOW_LIGHT_CHUNK);
     shader.vertexShader = "varying vec3 vGlintPos;\n" + shader.vertexShader.replace(
       "#include <project_vertex>",
       "#include <project_vertex>\n  vGlintPos = (modelMatrix * vec4(transformed, 1.0)).xyz;",
