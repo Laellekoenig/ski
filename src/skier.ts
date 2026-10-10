@@ -3,7 +3,8 @@ import { damp, lerp } from "./noise";
 import { CHARACTERS, type Character } from "./characters";
 import { gearMesh, limbGeometry, loftGeometry } from "./gear";
 import { makeBoot, makePole, makeSki, POLE_LENGTH, SKI_TAIL, SKI_TIP } from "./equipment";
-import { dressHead, dressNeck, jacketMaterial, pantsMaterial } from "./looks";
+import { dressHead } from "./headwear";
+import { dressNeck, jacketMaterial, pantsMaterial } from "./looks";
 
 export { makeSki } from "./equipment";
 
@@ -144,7 +145,7 @@ export class Skier {
     };
     const female = c.gender === "female";
     const baggy = c.outfit === "park";
-    const puffy = c.print === "quilted";
+    const puffy = !!c.puffy;
     const shoulder = (female ? 0.37 : baggy ? 0.47 : 0.44) + (puffy ? 0.04 : 0);
     const waist = (female ? 0.27 : baggy ? 0.42 : 0.34) + (puffy ? 0.04 : 0);
     const hipWidth = female ? waist + 0.08 : waist + 0.04;
