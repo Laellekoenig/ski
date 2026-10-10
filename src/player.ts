@@ -73,6 +73,8 @@ export class Player {
   events: PlayerEvents = {};
   /** 0..1, the white-out that hides getting back up after a fall. */
   fade = 0;
+  /** Riding backwards: the tails lead, after landing a 180 or spinning one off a hop. */
+  switch = false;
 
   private world: World;
   private particles: Particles;
@@ -139,6 +141,11 @@ export class Player {
     return this.vel.length();
   }
 
+  /** The way the rider is going: the tips, or the tails when riding switch. */
+  get facing() {
+    return this.heading + (this.switch ? Math.PI : 0);
+  }
+
   /** Take over a skier that is already in the scene, e.g. the one picked from the lineup. */
   adoptSkier(skier: Skier, squash = 0) {
     if (skier !== this.skier) {
@@ -172,6 +179,7 @@ export class Player {
     this.state = "ski";
     this.grounded = true;
     this.finished = false;
+    this.switch = false;
     this.airTime = this.spin = this.recover = this.steer = this.skid = 0;
     this.yawRate = this.accel = this.absorb = this.lastSpeed = 0;
     this.swingT = this.cloudAcc = 0;
@@ -292,7 +300,7 @@ export class Player {
 
         // skating / pushing off: only gets you going on the flat, it can't beat
         // gravity up a real slope or keep pushing once the skis are running
-        const skating = tuck && !this.ducking && vf < SKATE_MAX;
+        const skating = tuck && !this.ducking && !this.switch && vf < SKATE_MAX;
         this.skate = lerp(this.skate, skating ? 1 : 0, damp(6, dt));
         if (skating) {
           const flat = 1 - smoothstep(0, SKATE_MAX_GRADE, this.fwd.y);
@@ -323,6 +331,7 @@ export class Player {
     }
 
     this.pos.addScaledVector(this.vel, dt);
+    this.updateSwitch();
 
     // soft world bounds
     const clampAxis = (axis: "x" | "z", min: number, max: number) => {
@@ -370,6 +379,13 @@ export class Player {
     }
   }
 
+  /** Tips or tails first? Decided by whichever end the travel is closer to; at a standstill the tips lead again. */
+  private updateSwitch() {
+    const hv = Math.hypot(this.vel.x, this.vel.z);
+    if (hv > 1) this.switch = this.vel.x * Math.sin(this.heading) + this.vel.z * Math.cos(this.heading) < 0;
+    else if (this.grounded && hv < 0.3) this.switch = false;
+  }
+
   private startSwing(side: number, speed: number) {
     this.swingT = SWING_TIME;
     this.swingSide = Math.sign(side);
@@ -406,9 +422,10 @@ export class Player {
         this.crash(hit, dt);
         return;
       } else {
-        if (cos < -0.45) this.heading += Math.PI; // landed switch: spin round
+        // landed backwards: ride it out switch
+        this.switch = cos < 0;
         const turns = Math.round(Math.abs(this.spin) / Math.PI) * 180;
-        if (turns >= 360) this.events.onTrick?.(`${turns}!`);
+        if (turns >= 180) this.events.onTrick?.(`${turns}${this.switch ? " switch" : ""}!`);
         else if (air > 1.2) this.events.onTrick?.("Big air!");
       }
     }
@@ -458,12 +475,13 @@ export class Player {
 
     // lateral load from the turn rate: lean in as far as the speed demands
     let dh = Math.atan2(Math.sin(this.heading - this.lastHeading), Math.cos(this.heading - this.lastHeading));
-    if (Math.abs(dh) > 1) dh = 0; // landed switch and spun round
+    if (Math.abs(dh) > 1) dh = 0; // respawned facing somewhere else
     this.lastHeading = this.heading;
     this.yawRate = lerp(this.yawRate, this.grounded ? dh / dt : 0, damp(12, dt));
     // (the arcade turn rate is far tighter than real carving, so the lean eases toward its limit
     // instead of saturating: a gentle curve still leans visibly less than a hard one at speed)
-    const edge = -0.75 * Math.tanh(((speed * this.yawRate) / G) * 0.55);
+    // (riding switch the body faces back up the turn, so the inside is on its other side)
+    const edge = (this.switch ? 0.75 : -0.75) * Math.tanh(((speed * this.yawRate) / G) * 0.55);
     this.accel = lerp(this.accel, this.grounded ? (speed - this.lastSpeed) / dt : 0, damp(6, dt));
     this.lastSpeed = speed;
     // terrain curvature along the line of travel: compressions push up, crests drop away
@@ -491,7 +509,7 @@ export class Player {
 
     this.skier.update(dt, {
       speed: this.speed,
-      turn: this.steer,
+      turn: this.switch ? -this.steer : this.steer,
       tuck: (input.tuck || this.ducking) && this.skate < 0.5,
       duck: this.ducking,
       brake: input.brake,
@@ -506,6 +524,7 @@ export class Player {
       airTime: this.airTime,
       toGround,
       spin: this.grounded ? 0 : 6.5 * this.steer,
+      switch: this.switch,
     });
 
     // blob shadow
@@ -531,7 +550,8 @@ export class Player {
       while (this.sprayAcc > 1) {
         this.sprayAcc -= 1;
         const side = Math.sign(this.vel.dot(this.lat)) || 1;
-        const p = this.tmp.copy(this.pos).addScaledVector(this.fwd, -0.4 + Math.random() * 0.6);
+        // thrown up behind the feet, which riding switch is toward the tips
+        const p = this.tmp.copy(this.pos).addScaledVector(this.fwd, (this.switch ? -1 : 1) * (-0.4 + Math.random() * 0.6));
         p.y += 0.1;
         this.particles.emit(
           p,

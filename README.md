@@ -25,6 +25,7 @@ Choose one of seven human riders with **1–7**, left/right arrows, or their nam
 | `Shift` (hold) | duck into a low racing tuck: faster, but steering is cut to about a third |
 | `S` | brake / snowplough |
 | `Space` | jump |
+| `Space`, then hold `A` / `D` for about half the flight | spin a 180 and land switch, riding backwards; spin another 180 to face forward again. Under- or over-rotate and you fall |
 | `R` | restart at the top |
 | `Esc` / `P` | pause |
 | Mouse drag | look around; release to return to the follow camera |
@@ -70,7 +71,7 @@ The importer caches downloads in the system temporary directory, decodes the sou
 - `src/engadine.ts`, `src/data/`: bundled terrain loading and geographic elevation sampling
 - `src/world.ts`: winter sky with thin drifting clouds, atmospheric haze, and lighting
 - `src/weather.ts`: sparse, subtle diamond dust (the snow reflections live in `src/materials.ts`)
-- `src/player.ts`: carving, ducking, braking, swings, jumps, landings, and run completion
+- `src/player.ts`: carving, ducking, braking, swings, jumps, landings, switch riding, and run completion
 - `src/skier.ts`, `src/characters.ts`, `src/gear.ts`, `src/equipment.ts`: four articulated skiers with smooth lathed and lofted bodies, shaped skis and bindings
 - `src/looks.ts`: printed outfits, painted faces, hair and headwear
 - `src/lineup.ts`: character selection and the transition onto skis

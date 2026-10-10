@@ -54,6 +54,8 @@ export interface PoseInput {
   toGround?: number;
   /** Spin rate in the air, rad/s; positive spins right. */
   spin?: number;
+  /** Riding backwards: twist round and look down the slope over the left shoulder. */
+  switch?: boolean;
 }
 
 /** A damped spring: the body overshoots and settles, so it reads as carrying momentum. */
@@ -137,6 +139,7 @@ export class Skier {
   private grab = 0;
   private reach = 0;
   private spinning = 0;
+  private lookBack = 0;
 
   constructor(readonly character: Character = CHARACTERS[0]) {
     const c = character;
@@ -414,6 +417,7 @@ export class Skier {
     this.grab = lerp(this.grab, long ? fold : 0, k(10));
     this.reach = lerp(this.reach, tricks ? 1 - smoothstep(toGround, 0.1, 0.4) : 0, k(14));
     this.spinning = lerp(this.spinning, flying ? Math.min(1, Math.abs(p.spin ?? 0) / 4) : 0, k(6));
+    this.lookBack = lerp(this.lookBack, p.switch && grounded ? 1 : 0, k(5));
 
     // --- carving: lean into the load, edges bite, the upper body stays quiet over the skis
     this.plow = lerp(this.plow, p.brake ? 1 : 0, k(8));
@@ -485,12 +489,12 @@ export class Skier {
     // shoulders ride over the gliding ski and turn gently towards it
     this.torso.rotation.set(
       0.04 + this.crouch * 0.52 + this.duck * 0.4 - this.seat * 0.15 + pitch + this.fold * 0.3 + this.grab * 0.25 + crunch * 0.26 + sink * 0.08 + this.skating * 0.12,
-      twist - sway * 0.08,
+      twist - sway * 0.08 + this.lookBack * 0.45,
       sway * 0.07 - lean * 0.45,
     );
     // eyes stay level and ahead; they look into the turn and down at the landing
     this.head.rotation.x = -this.torso.rotation.x * 0.7 + this.reach * 0.25;
-    this.head.rotation.y = lerp(this.head.rotation.y, -p.turn * 0.35 + twist * (grounded ? -1 : 0.6) + sway * 0.07, k(5));
+    this.head.rotation.y = lerp(this.head.rotation.y, -p.turn * 0.35 + twist * (grounded ? -1 : 0.6) + sway * 0.07 + this.lookBack * 0.95, k(5));
     this.head.rotation.z = -lean * 0.25 - sway * 0.06;
 
     // --- legs
