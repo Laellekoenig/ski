@@ -17,6 +17,9 @@ const SHOULDER_Y = 0.42;
 const HIP_X = 0.12;
 const ANKLE = 0.25;
 const HAND = 0.262;
+/** Shoulder to elbow, and elbow to the pole grip. */
+const UPPER_ARM = 0.25;
+const GRIP = 0.267;
 /** Skating stride cycle (left push + right push), rad/s: brisk first steps, longer glides as the skis run. */
 const SKATE_RATE_START = 4.4;
 const SKATE_RATE_RUNNING = 2.5;
@@ -115,9 +118,14 @@ export class Skier {
   private leanS = new Spring(1.7, 0.55);
   private pitchS = new Spring(1.8, 0.5);
   private twistS = new Spring(1.4, 0.6);
-  private edgeSide = 0;
+  /** The way the rider is steering, −1, 0 or 1, held through small stick wobbles. */
+  private turnSide = 0;
   /** Pole plant progress per side, 0..1 (1 = idle). */
   private plant = [1, 1];
+  /** Fades plants in on the snow and out in the air or a tuck. */
+  private planting = 0;
+  /** Pole pitch and roll in the forearm before a plant takes over the tip. */
+  private poleRest = [new THREE.Vector2(), new THREE.Vector2()];
   private hipY = 0.94;
   private time = 0;
   private skatePhase = 0;
@@ -359,6 +367,10 @@ export class Skier {
   private tmpV = new THREE.Vector3();
   private tmpB = new THREE.Vector3();
   private tmpM = new THREE.Matrix4();
+  private tmpAim = new THREE.Vector2();
+  private tmpAim3 = new THREE.Vector3();
+  private tmpS = new THREE.Vector3();
+  private tmpT = new THREE.Vector3();
 
   private solveLeg(leg: Leg, hip: THREE.Vector3, foot: THREE.Vector3) {
     const v = this.tmpV.subVectors(foot, hip);
@@ -421,14 +433,17 @@ export class Skier {
     this.skating = lerp(this.skating, grounded ? p.skate : 0, k(8));
     const edgeT = grounded ? (p.edge ?? p.turn * (0.15 + speedN * 0.4)) * (1 - this.plow * 0.6) : 0;
     const lean = this.leanS.step(edgeT, dt);
-    const side = Math.abs(edgeT) > 0.14 ? Math.sign(edgeT) : Math.abs(edgeT) < 0.05 ? 0 : this.edgeSide;
-    if (side !== this.edgeSide) {
-      // plant the new inside pole to time the edge change
-      if (side && grounded && !p.tuck && p.speed > 4) this.plant[side > 0 ? 0 : 1] = 0;
-      this.edgeSide = side;
+    const side = Math.abs(p.turn) > 0.25 ? Math.sign(p.turn) : Math.abs(p.turn) < 0.1 ? 0 : this.turnSide;
+    if (side !== this.turnSide) {
+      // steering into a new turn plants its inside pole to time the edge change (left turn, left
+      // pole); a pole still in the snow from the last one finishes its plant first
+      const i = side > 0 ? 0 : 1;
+      if (side && grounded && !p.tuck && !p.duck && p.speed > 4 && this.plant[i] > 0.7) this.plant[i] = 0;
+      this.turnSide = side;
     }
     // the faster the run, the quicker the touch
-    for (let i = 0; i < 2; i++) this.plant[i] = Math.min(1, this.plant[i] + dt / lerp(0.7, 0.45, speedN));
+    for (let i = 0; i < 2; i++) this.plant[i] = Math.min(1, this.plant[i] + dt / lerp(0.75, 0.5, speedN));
+    this.planting = lerp(this.planting, grounded && !p.tuck && !p.duck ? 1 : 0, k(12));
     // crossing from edge to edge the body rises and floats over the skis
     const cross = grounded ? Math.min(0.28, Math.abs(this.leanS.v) * 0.05) : 0;
 
@@ -548,16 +563,27 @@ export class Skier {
     ] as const) {
       const outside = Math.max(0, s * lean) / 0.8;
       const inside = Math.max(0, -s * lean) / 0.8;
-      // pole plant: the hand reaches forward and down while the wrist swings the tip through, the
-      // tip touches beside the inside ski and stays put while the body passes over it, then lifts
-      // as the hand recovers forward. It lands at the edge change, before the new turn leans the body over.
+      // pole plant: the inside hand lifts forward while the wrist swings the tip round, then drives
+      // it into the snow ahead of the boot and outside the inside ski at the edge change. The body
+      // runs past the planted tip as the new turn leans over, then it lifts and trails again.
       const u = this.plant[i];
-      const reach = smoothstep(u, 0, 0.2) * (1 - smoothstep(u, 0.4, 0.8));
-      const touch = smoothstep(u, 0.13, 0.21) * (1 - smoothstep(u, 0.42, 0.55));
-      const pass = smoothstep(u, 0.2, 0.5) * (1 - smoothstep(u, 0.5, 0.9));
+      const plants = this.planting * (1 - sk);
+      const reach = smoothstep(u, 0, 0.12) * (1 - smoothstep(u, 0.45, 0.8)) * plants;
+      // (the pole hands back to its trailing pose only once its path has brought the tip back there)
+      const lead = smoothstep(u, 0, 0.08) * (1 - smoothstep(u, 0.88, 1)) * plants;
+      // where the tip goes in, in skier space; it slides back under the passing body
+      const spot = this.tmpS.set(s * 0.5, 0, lerp(0.5, 0.05, smoothstep(u, 0.15, 0.5)));
       // inside hand reaches forward, outside hand lifts for balance
-      let fwd = 0.55 + reach * 0.3 - pass * 0.45 + inside * 0.25 - outside * 0.05 + chatter * 0.04;
-      let out = 0.2 + outside * 0.35 - reach * 0.06;
+      let fwd = 0.55 + inside * 0.25 - outside * 0.05 + chatter * 0.04;
+      let out = 0.2 + outside * 0.35;
+      let bend = 0.4;
+      if (reach > 0.001) {
+        // the hand rides up the shaft from the spot: up, a little in and back
+        const ik = this.reachFor(arm, s, this.tmpT.copy(spot).add(this.tmpU.set(-s * 0.2, 0.8, -0.25).setLength(POLE_LENGTH)));
+        fwd = lerp(fwd, ik.x, reach);
+        out = lerp(out, ik.y, reach);
+        bend = lerp(bend, ik.z, reach);
+      }
       if (p.tuck) {
         fwd = 1.15;
         out = 0.05;
@@ -586,16 +612,15 @@ export class Skier {
         fwd = lerp(fwd, -aim.x, grab);
         out = lerp(out, s * aim.z, grab);
       }
-      // a turn's plant straightens the elbow to reach the snow; skating bends it to plant and locks it out at the end of the drive
-      this.forearms[i].rotation.x = lerp(lerp(-0.4 + reach * 0.32, lerp(-0.6, -0.12, drive), sk), -0.1, grab);
-      const armRate = k(10 + sk * 6);
+      // a turn's plant bends the elbow to hold the grip up the shaft; skating bends it to plant and locks it out at the end of the drive
+      this.forearms[i].rotation.x = lerp(lerp(-bend, lerp(-0.6, -0.12, drive), sk), -0.1, grab);
+      const armRate = k(10 + sk * 6 + reach * 14);
       arm.rotation.x = lerp(arm.rotation.x, -fwd, armRate);
       arm.rotation.z = lerp(arm.rotation.z, s * out, armRate);
-      pole.rotation.z = lerp(pole.rotation.z, -s * out * lerp(0.6, 0.3, reach), k(10));
-      // poles trail behind, roughly parallel to the slope; a plant swings the tip forward onto the snow
-      let poleX = fwd + 0.75 - reach * 0.7 + (p.tuck ? 0.9 : 0) - this.duck * 0.6 - this.seat * 0.6;
-      const snow = grounded && touch > 0.01 ? this.poleToSnow(i, 0) : -Infinity;
-      if (snow > -Infinity) poleX = lerp(poleX, snow, touch);
+      const rest = this.poleRest[i];
+      rest.y = lerp(rest.y, -s * out * 0.6, k(10));
+      // poles trail behind, roughly parallel to the slope
+      let poleX = fwd + 0.75 + (p.tuck ? 0.9 : 0) - this.duck * 0.6 - this.seat * 0.6;
       if (sk > 0.01) {
         // skating: keep the tips on the snow through the drive, then swing them through for the next plant
         const hand = this.tmpV.copy(pole.position);
@@ -610,10 +635,68 @@ export class Skier {
         const chain = this.torso.rotation.x + arm.rotation.x + this.forearms[i].rotation.x;
         poleX = lerp(poleX, lerp(swing, planted, hold) - chain, sk);
       }
-      pole.rotation.x = lerp(pole.rotation.x, poleX, k(10 + sk * 30 + touch * 40));
+      rest.x = lerp(rest.x, poleX, k(10 + sk * 30));
+      pole.rotation.set(rest.x, 0, rest.y);
+      if (lead > 0.001) {
+        // the tip swings round the outside from behind the hand to the spot, touches down, and lifts
+        // to trail again once the body has run past (bearing from straight ahead, toward the outside)
+        const grip = this.gripAt(i);
+        const toSpot = Math.atan2(s * (spot.x - grip.x), spot.z - grip.z);
+        const bearing = u < 0.15 ? lerp(2.9, toSpot, smoothstep(u, 0.01, 0.15)) : lerp(toSpot, 2.9, smoothstep(u, 0.45, 0.8));
+        const lift = 0.06 * (1 - smoothstep(u, 0.1, 0.15)) + 0.14 * smoothstep(u, 0.45, 0.6) - 0.05 * smoothstep(u, 0.7, 0.95);
+        const aim = this.poleAim(i, s * Math.sin(bearing), Math.cos(bearing), lift);
+        // (the short way round from the trailing pitch)
+        pole.rotation.set(lerp(rest.x, rest.x + Math.atan2(Math.sin(aim.x - rest.x), Math.cos(aim.x - rest.x)), lead), 0, lerp(rest.y, aim.y, lead));
+      }
       // a low inside hand carries its tip just clear of the snow instead of through it
-      if (grounded && sk < 0.5) pole.rotation.x = Math.max(pole.rotation.x, this.poleToSnow(i, 0.08 * (1 - touch)));
+      // (a planted or swinging tip is already on its own path)
+      if (grounded && sk < 0.5 && (lead < 0.5 || u > 0.7)) pole.rotation.x = Math.max(pole.rotation.x, this.poleToSnow(i, 0.08));
     }
+  }
+
+  /** Skier-space grip of a pole; leaves the forearm-to-skier transform in `tmpM`. */
+  private gripAt(i: number) {
+    const m = this.tmpM.identity();
+    for (const part of [this.lean, this.hips, this.torso, i ? this.armR : this.armL, this.forearms[i]]) {
+      part.updateMatrix();
+      m.multiply(part.matrix);
+    }
+    return this.tmpV.copy((i ? this.poleR : this.poleL).position).applyMatrix4(m);
+  }
+
+  /**
+   * Shoulder swing forward (x), out (y) and elbow bend (z) that put the grip on a skier-space point,
+   * or as near as the arm reaches.
+   */
+  private reachFor(arm: THREE.Group, s: number, target: THREE.Vector3) {
+    this.lean.updateMatrix();
+    this.hips.updateMatrix();
+    this.torso.updateMatrix();
+    this.tmpM.multiplyMatrices(this.lean.matrix, this.hips.matrix).multiply(this.torso.matrix).invert();
+    const d = target.applyMatrix4(this.tmpM).sub(arm.position);
+    const a = UPPER_ARM, b = GRIP;
+    const len = THREE.MathUtils.clamp(d.length(), Math.abs(a - b) + 0.02, a + b - 0.001);
+    const bend = Math.acos(THREE.MathUtils.clamp((len * len - a * a - b * b) / (2 * a * b), -1, 1));
+    // the bent arm in its own frame hangs down to (0, y, z); roll it out, then swing it forward onto the target
+    const y = -(a + b * Math.cos(bend)), z = b * Math.sin(bend);
+    const roll = Math.asin(THREE.MathUtils.clamp(d.x / -y, -1, 1));
+    const swing = Math.atan2(d.z, d.y) - Math.atan2(z, y * Math.cos(roll));
+    return this.tmpAim3.set(-Math.atan2(Math.sin(swing), Math.cos(swing)), s * roll, bend);
+  }
+
+  /**
+   * Forearm-space pole pitch (x) and roll (y) that put the tip `lift` above the snow, out from the hand
+   * along the skier-space heading (`x`, `z`).
+   */
+  private poleAim(i: number, x: number, z: number, lift: number) {
+    const grip = this.gripAt(i);
+    const m = this.tmpM;
+    // the shaft reaches this far across the snow (a hand too high just lets it hang); swing it that way
+    const drop = Math.min(grip.y - lift, POLE_LENGTH * 0.995);
+    const span = Math.sqrt(POLE_LENGTH * POLE_LENGTH - drop * drop);
+    const d = this.tmpB.set(x * span, -drop, z * span).transformDirection(m.invert());
+    // the shaft hangs along −y, rolled by z then pitched by x
+    return this.tmpAim.set(Math.atan2(-d.z, -d.y), Math.asin(THREE.MathUtils.clamp(d.x, -1, 1)));
   }
 
   /** Forearm-space pole pitch that puts the tip `clear` above the snow behind the hand; −∞ when it can't reach. */
