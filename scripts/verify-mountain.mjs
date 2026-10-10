@@ -94,6 +94,26 @@ export async function verifyMountain(game) {
       topSpeed = Math.max(topSpeed, player.speed);
     }
     check('Turning back and forth cannot pump up speed', topSpeed < 25);
+    // the same rhythm released in the carve meter's sweet spot, untimed vs. timed, ducked for the most speed
+    const carveRun = (hold) => {
+      player.spawnAt(0, 250, 0);
+      step(5, { tuck: true });
+      let sum = 0, top = 0, carves = 0, side = 1;
+      player.events = { onCarve: () => carves++ };
+      for (let turn = 0; turn < 40; turn++, side = -side) {
+        for (let i = 0; i < hold * 120; i++) {
+          step(1 / 120, { duck: true, steer: side });
+          sum += player.speed;
+          top = Math.max(top, player.speed);
+        }
+        step(0.1, { duck: true });
+      }
+      player.events = {};
+      return { avg: sum / (40 * hold * 120), top, carves };
+    };
+    const untimed = carveRun(0.4);
+    const timed = carveRun(0.6);
+    check('Timed carves gain speed but stay under the top speed', timed.carves > 30 && untimed.carves === 0 && timed.avg > untimed.avg + 2 && timed.top < 27);
     player.spawnAt(0, 250, 0);
     step(3);
     step(0.7, { steer: 0.6 });
@@ -113,7 +133,7 @@ export async function verifyMountain(game) {
     }
     player.spawnAtSummit();
     check('Reset clears the finish and returns to the start', !player.finished && player.pos.x === 0 && player.pos.z === 0 && player.pos.y === 680 && player.speed === 0);
-    return { passed: results.length, hill: { minGrade, maxGrade, reliefRange }, mechanics: results.slice(-12) };
+    return { passed: results.length, hill: { minGrade, maxGrade, reliefRange }, mechanics: results.slice(-13) };
   } finally {
     player.events = events;
     player.spawnAtSummit();

@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import { Skier } from "./skier";
 import type { World } from "./world";
-import type { InputState } from "./input";
+import { GENTLE_STEER, type InputState } from "./input";
 import type { Particles } from "./particles";
 import type { Trails } from "./trails";
 import { BOUNDS, RUN_END, SUMMIT } from "./layout";
@@ -33,6 +33,28 @@ const SWING_YAW = 0.5;
 const SWING_SHED = 0.3;
 const SWING_SHED_MAX = 6;
 const SWING_MIN_SPEED = 4;
+/**
+ * Carve timing: holding a turn fills the meter by the rider's leg. Let go (or switch edges)
+ * in the sweet spot for a burst of speed; hold on into the red and the skis wash out, scrubbing speed.
+ * Gentle Q / E curves fill slowly with a wide sweet spot, hard A / D turns fill fast with a narrow one.
+ */
+const CARVE_MIN_SPEED = 5;
+const CARVE_FILL_GENTLE = 1.5;
+const CARVE_FILL_HARD = 0.85;
+const CARVE_SWEET = 0.7;
+/** Half the sweet spot's height on the meter. */
+const CARVE_SWEET_GENTLE = 0.13;
+const CARVE_SWEET_HARD = 0.05;
+const CARVE_RED = 0.9;
+/** Speed lost per second while the meter sits in the red, in m/s². */
+const CARVE_SCRUB = 4.5;
+/** Speed a well-timed carve adds, in m/s, eased in over a moment. */
+const CARVE_BOOST_GENTLE = 1.1;
+const CARVE_BOOST_HARD = 1.6;
+const CARVE_BOOST_TIME = 0.3;
+/** The boost fades out over the last few m/s below this, so carving can't run away with the speed. */
+const CARVE_TOP_SPEED = 26;
+const CARVE_FADE = 8;
 /** Landing harder than this into the snow (m/s along its normal) folds the legs and throws the rider. */
 const CRASH_IMPACT = 15;
 /** Landing a spin: skis within this of the line of travel (tips or tails first) touch down clean, rad. */
@@ -53,6 +75,20 @@ export const START_HEADING = 0;
 
 export type PlayerState = "ski" | "crash";
 
+/** The carve meter by the rider's leg, all heights 0 (bottom) .. 1 (top). */
+export interface CarveMeter {
+  /** -1 / 1 while a turn is held, 0 once it's let go */
+  side: number;
+  charge: number;
+  sweetLo: number;
+  sweetHi: number;
+  red: number;
+  /** how the last turn ended: hit the sweet spot, or held into the red */
+  result: "" | "carve" | "wash";
+  /** seconds since the turn was let go */
+  released: number;
+}
+
 export interface PlayerEvents {
   onJump?: () => void;
   onLand?: (impact: number, airTime: number) => void;
@@ -61,6 +97,8 @@ export interface PlayerEvents {
   onThud?: (impact: number) => void;
   onTrick?: (label: string) => void;
   onSwing?: () => void;
+  onCarve?: () => void;
+  onWashOut?: () => void;
   onFinish?: (runDistance: number) => void;
 }
 
@@ -84,6 +122,7 @@ export class Player {
   fade = 0;
   /** Riding backwards: the tails lead, after landing a 180 or spinning one off a hop. */
   switch = false;
+  readonly carve: CarveMeter = { side: 0, charge: 0, sweetLo: 0, sweetHi: 0, red: CARVE_RED, result: "", released: Infinity };
 
   private world: World;
   private particles: Particles;
@@ -104,6 +143,10 @@ export class Player {
   private swingSide = 0;
   private swingDecel = 0;
   private cloudAcc = 0;
+  /** How hard the held turn is, 0 (gentle Q / E) .. 1 (full A / D), and the carve boost still to come. */
+  private carveHard = 0;
+  private boostT = 0;
+  private boostAcc = 0;
   /** Smoothed pose signals for the rider's animation. */
   private yawRate = 0;
   private accel = 0;
@@ -191,7 +234,8 @@ export class Player {
     this.switch = false;
     this.airTime = this.spin = this.recover = this.steer = this.skid = 0;
     this.yawRate = this.accel = this.absorb = this.lastSpeed = 0;
-    this.swingT = this.cloudAcc = 0;
+    this.swingT = this.cloudAcc = this.boostT = 0;
+    this.endCarve(true);
     this.lastHeading = this.heading;
     if (this.wipeout.active) {
       this.wipeout.clear();
@@ -256,6 +300,7 @@ export class Player {
       const speed = this.vel.length();
       if (input.swingPressed && this.swingT <= 0 && speed > SWING_MIN_SPEED) this.startSwing(input.swingPressed, speed);
       const swing = this.swingEnvelope();
+      this.carveTurn(dt, input, speed, swing);
       const speedN = Math.min(1, speed / 25);
       const rate = (brake ? 2.8 : 2.4) - speedN * 0.9;
       // the swing pivots the skis across the line of travel; the momentum keeps going, so they skid
@@ -279,15 +324,16 @@ export class Player {
         let vf = this.vel.dot(this.fwd);
         let vl = this.vel.dot(this.lat);
         // edges grip: sideways motion bleeds off, part of its energy is carved into
-        // forward speed. Never more than was lost, so turning can't pump up speed.
-        // (a swing skids too, but its speed loss is metered separately below)
+        // forward speed. Never more than was lost, so turning alone can't pump up speed;
+        // only a well-timed carve does (below). (a swing skids too, its loss is metered separately)
         const grip = brake ? 2.2 : swing > 0 ? 3 : 7.5;
         const newVl = vl * Math.exp(-grip * dt);
         if (!brake) {
           vf = Math.sign(vf || 1) * Math.sqrt(vf * vf + CARVE_KEEP * (vl * vl - newVl * newVl));
         }
         vl = newVl;
-        this.skid = Math.min(1, Math.abs(vl) / 4 + (brake ? Math.min(1, speed / 6) : 0) + swing * 2);
+        const washing = this.carve.side !== 0 && this.carve.charge >= CARVE_RED;
+        this.skid = Math.min(1, Math.abs(vl) / 4 + (brake ? Math.min(1, speed / 6) : 0) + swing * 2 + (washing ? 0.6 : 0));
 
         // friction & drag
         const mu = MU + (brake ? 0.55 : 0);
@@ -306,6 +352,19 @@ export class Player {
           vf *= f;
           vl *= f;
         }
+        // held too long: the edges let go and the skis chatter sideways
+        const sc = Math.hypot(vf, vl);
+        if (washing && sc > 1e-4) {
+          const f = Math.max(0, sc - CARVE_SCRUB * dt) / sc;
+          vf *= f;
+          vl *= f;
+        }
+        // a timed carve springs out of the turn, fading out toward the top speed
+        if (this.boostT > 0) {
+          const step = Math.min(dt, this.boostT);
+          this.boostT -= step;
+          vf += Math.sign(vf || 1) * this.boostAcc * (1 - smoothstep(CARVE_TOP_SPEED - CARVE_FADE, CARVE_TOP_SPEED, sc)) * step;
+        }
 
         // skating / pushing off: only gets you going on the flat, it can't beat
         // gravity up a real slope or keep pushing once the skis are running
@@ -319,6 +378,7 @@ export class Player {
         this.vel.copy(this.fwd).multiplyScalar(vf).addScaledVector(this.lat, vl);
 
         if (input.jumpPressed) {
+          this.endCarve();
           this.vel.addScaledVector(n, JUMP_POP).y += JUMP_LIFT;
           this.grounded = false;
           this.airTime = 0;
@@ -329,6 +389,8 @@ export class Player {
       }
     } else {
       // airborne
+      if (this.carve.side) this.endCarve();
+      this.carve.released += dt;
       this.airTime += dt;
       this.vel.y -= G * dt;
       const airSpeed = this.vel.length();
@@ -382,7 +444,8 @@ export class Player {
       this.vel.set(0, 0, 0);
       this.grounded = true;
       this.state = "ski";
-      this.skid = this.steer = this.skate = 0;
+      this.skid = this.steer = this.skate = this.boostT = 0;
+      this.endCarve(true);
       this.trails.break();
       this.events.onFinish?.(this.runDistance);
     }
@@ -393,6 +456,50 @@ export class Player {
     const hv = Math.hypot(this.vel.x, this.vel.z);
     if (hv > 1) this.switch = this.vel.x * Math.sin(this.heading) + this.vel.z * Math.cos(this.heading) < 0;
     else if (this.grounded && hv < 0.3) this.switch = false;
+  }
+
+  /** Fill the meter while a turn is held; letting go or switching edges is the moment that counts. */
+  private carveTurn(dt: number, input: InputState, speed: number, swing: number) {
+    const c = this.carve;
+    c.released += dt;
+    const side = Math.abs(input.steer) > 0.15 ? Math.sign(input.steer) : 0;
+    if (c.side && (input.brake || swing > 0)) this.endCarve();
+    if (c.side && side !== c.side) {
+      if (c.charge >= c.sweetLo && c.charge <= c.sweetHi) {
+        c.result = "carve";
+        this.boostT = CARVE_BOOST_TIME;
+        this.boostAcc = lerp(CARVE_BOOST_GENTLE, CARVE_BOOST_HARD, this.carveHard) / CARVE_BOOST_TIME;
+        this.squash = Math.max(this.squash, 0.2);
+        this.events.onCarve?.();
+      }
+      this.endCarve();
+    }
+    if (side && !c.side && speed > CARVE_MIN_SPEED && !input.brake && swing <= 0) {
+      c.side = side;
+      c.charge = 0;
+      c.result = "";
+    }
+    if (!c.side) return;
+
+    // the sweet spot follows the keys held, so easing from A onto Q mid-turn widens it
+    this.carveHard = THREE.MathUtils.clamp((Math.abs(input.steer) - GENTLE_STEER) / (1 - GENTLE_STEER), 0, 1);
+    const half = lerp(CARVE_SWEET_GENTLE, CARVE_SWEET_HARD, this.carveHard);
+    c.sweetLo = CARVE_SWEET - half;
+    c.sweetHi = CARVE_SWEET + half;
+    const was = c.charge;
+    c.charge = Math.min(1, c.charge + dt / lerp(CARVE_FILL_GENTLE, CARVE_FILL_HARD, this.carveHard));
+    if (was < CARVE_RED && c.charge >= CARVE_RED) {
+      c.result = "wash";
+      this.events.onWashOut?.();
+    }
+  }
+
+  /** Let go of the turn: the meter holds where it stopped, then fades (or vanishes at once with `hide`). */
+  private endCarve(hide = false) {
+    if (hide) this.carve.released = Infinity;
+    if (!this.carve.side) return;
+    this.carve.side = 0;
+    if (!hide) this.carve.released = 0;
   }
 
   /** `side` 0 pivots nowhere: the skis just skid, as after a crooked landing. */
@@ -464,7 +571,8 @@ export class Player {
   private crash(hit: THREE.Vector3, dt: number) {
     if (this.state === "crash") return;
     this.state = "crash";
-    this.recover = this.swingT = this.skate = 0;
+    this.recover = this.swingT = this.skate = this.boostT = 0;
+    this.endCarve(true);
     // the skis no longer point anywhere: follow the line the rider was thrown along
     if (Math.hypot(hit.x, hit.z) > 1) this.heading = Math.atan2(hit.x, hit.z);
     this.trails.break();

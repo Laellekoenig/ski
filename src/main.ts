@@ -97,6 +97,8 @@ player.events = {
   onThud: (impact) => audio.thud(impact),
   onTrick: () => audio.trick(),
   onSwing: () => audio.swing(),
+  onCarve: () => audio.carve(),
+  onWashOut: () => audio.washOut(),
   onFinish: endRun,
 };
 
@@ -306,8 +308,25 @@ const STEP = 1 / 120;
 let acc = 0;
 let last = performance.now();
 
+const meterAt = new THREE.Vector3();
+const meterRight = new THREE.Vector3();
+const meterScreen = { x: 0, y: 0 };
 function updateHud() {
   hud.update(player.runDistance, player.finished, player.fade);
+  // the carve meter stands just to the right of the rider's knee
+  let at: typeof meterScreen | null = null;
+  if (started && player.state === "ski") {
+    camera.updateMatrixWorld();
+    meterRight.setFromMatrixColumn(camera.matrixWorld, 0);
+    meterAt.copy(player.pos).addScaledVector(meterRight, 0.75).y += 0.5;
+    meterAt.project(camera);
+    if (meterAt.z < 1) {
+      meterScreen.x = (meterAt.x + 1) / 2 * window.innerWidth;
+      meterScreen.y = (1 - meterAt.y) / 2 * window.innerHeight;
+      at = meterScreen;
+    }
+  }
+  hud.updateCarve(player.carve, at);
 }
 
 function frame(now: number) {
