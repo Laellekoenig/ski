@@ -2,16 +2,20 @@ import * as THREE from "three";
 import { damp, lerp } from "./noise";
 import { CHARACTERS, type Character } from "./characters";
 import { gearMesh, limbGeometry, loftGeometry } from "./gear";
-import { makeBoot, makeSki } from "./equipment";
+import { makeBoot, makePole, makeSki, POLE_LENGTH, SKI_TAIL, SKI_TIP } from "./equipment";
 import { dressHead, dressNeck, jacketMaterial, pantsMaterial } from "./looks";
 
 export { makeSki } from "./equipment";
 
-const DARK = 0x181d23;
 const THIGH = 0.39;
 const SHIN = 0.38;
 /** Grip to pole tip. */
 const POLE = 0.95;
+/** Shoulder line above the hips, hips either side of them, the ankle above the ski's base and the hand below the elbow. */
+const SHOULDER_Y = 0.42;
+const HIP_X = 0.12;
+const ANKLE = 0.25;
+const HAND = 0.262;
 /** Skating stride cycle (left push + right push), rad/s. */
 const SKATE_RATE = 5.4;
 const UP = new THREE.Vector3(0, 1, 0);
@@ -28,7 +32,6 @@ export interface PoseInput {
   /** 0..1, pushing off at low speed */
   skate: number;
   seated: boolean;
-  crashed: boolean;
   /** compress legs briefly, e.g. on landing or before jumping */
   squash: number;
   /** 0..1, stepping on foot (skis off) */
@@ -84,6 +87,10 @@ interface Leg {
 /** Feet sit this far apart when standing on skis. */
 export const SKI_GAP = 0.19;
 
+/** Ragdoll joints, in the order `captureJoints` writes and `poseRagdoll` reads them. Pairs are [side −1, side +1]. */
+export const JOINT = { pelvis: 0, chest: 1, head: 2, shoulder: [3, 4], elbow: [5, 6], hand: [7, 8], hip: [9, 10], knee: [11, 12], foot: [13, 14] } as const;
+export const JOINT_COUNT = 15;
+
 /** Smooth, rounded bodies in loud early-2000s outfits with painted faces. Origin between the feet. */
 export class Skier {
   readonly root = new THREE.Group();
@@ -119,7 +126,6 @@ export class Skier {
   private duck = 0;
   private air = 0;
   private seat = 0;
-  private flail = 0;
   private walk = 0;
   private walkPhase = 0;
   private wave = 0;
@@ -194,7 +200,7 @@ export class Skier {
   }
 
   private addArm(arm: THREE.Group, pole: THREE.Group, side: number, c: Character, shoulder: number, r: number, jacket: THREE.Material) {
-    arm.position.set(side * (shoulder / 2 - r * 0.45), 0.42, 0);
+    arm.position.set(side * (shoulder / 2 - r * 0.45), SHOULDER_Y, 0);
     const deltoid = gearMesh(new THREE.SphereGeometry(r * 1.12, 12, 8), jacket);
     deltoid.scale.set(1.05, 0.95, 1); arm.add(deltoid);
     const sleeve = gearMesh(limbGeometry(0.25, [r * 0.84, r * 0.98, r * 1.04]), jacket);
@@ -215,14 +221,7 @@ export class Skier {
     const thumb = gearMesh(new THREE.SphereGeometry(0.022, 8, 6), c.gloves);
     thumb.scale.set(1, 1.3, 1); thumb.position.set(-side * 0.035, -0.252, 0.03); forearm.add(thumb);
     pole.position.set(0, -0.267, 0.023);
-    const shaft = gearMesh(new THREE.CylinderGeometry(0.007, 0.005, 0.99, 6), 0x899398, "metal");
-    shaft.position.y = -0.47; pole.add(shaft);
-    const grip = gearMesh(new THREE.CylinderGeometry(0.019, 0.017, 0.105, 8), DARK, "rubber");
-    pole.add(grip);
-    const basket = gearMesh(new THREE.CylinderGeometry(0.032, 0.034, 0.009, 8), c.accent, "plastic");
-    basket.position.y = -0.9; pole.add(basket);
-    const loop = gearMesh(new THREE.TorusGeometry(0.026, 0.005, 4, 8), DARK, "rubber");
-    loop.position.set(side * 0.018, 0.015, 0); pole.add(loop);
+    pole.add(makePole(c.accent, side));
     forearm.add(pole);
     this.torso.add(arm);
   }
@@ -233,6 +232,106 @@ export class Skier {
   }
   set skis(on: boolean) {
     for (const leg of this.legs) leg.board.visible = on;
+  }
+
+  /** Skis and poles on the rider, or torn off in a fall. */
+  set gear(on: boolean) {
+    this.skis = on;
+    this.poleL.visible = this.poleR.visible = on;
+  }
+
+  /** World-space joint positions of the current pose, to hand over to a ragdoll. */
+  captureJoints(out: THREE.Vector3[]) {
+    this.root.updateMatrixWorld(true);
+    out[JOINT.pelvis].setFromMatrixPosition(this.hips.matrixWorld);
+    this.torso.localToWorld(out[JOINT.chest].set(0, SHOULDER_Y, 0));
+    out[JOINT.head].setFromMatrixPosition(this.head.matrixWorld);
+    for (let i = 0; i < 2; i++) {
+      const leg = this.legs[i];
+      out[JOINT.shoulder[i]].setFromMatrixPosition((i ? this.armR : this.armL).matrixWorld);
+      out[JOINT.elbow[i]].setFromMatrixPosition(this.forearms[i].matrixWorld);
+      this.forearms[i].localToWorld(out[JOINT.hand[i]].set(0, -HAND, 0));
+      this.hips.localToWorld(out[JOINT.hip[i]].set(leg.side * HIP_X, 0, 0));
+      out[JOINT.knee[i]].setFromMatrixPosition(leg.knee.matrixWorld);
+      this.lean.localToWorld(out[JOINT.foot[i]].copy(leg.ski.position).setY(leg.ski.position.y + ANKLE));
+    }
+  }
+
+  /** World-space ends of a ski (tail, tip) and the way its topsheet faces. */
+  skiEnds(i: number, tail: THREE.Vector3, tip: THREE.Vector3, up: THREE.Vector3) {
+    const board = this.legs[i].board;
+    board.localToWorld(tail.set(0, 0, SKI_TAIL));
+    board.localToWorld(tip.set(0, 0, SKI_TIP));
+    up.setFromMatrixColumn(board.matrixWorld, 1).normalize();
+  }
+
+  /** World-space grip and tip of a pole. */
+  poleEnds(i: number, grip: THREE.Vector3, tip: THREE.Vector3) {
+    const pole = i ? this.poleR : this.poleL;
+    pole.localToWorld(grip.set(0, 0, 0));
+    pole.localToWorld(tip.set(0, -POLE_LENGTH, 0));
+  }
+
+  private tmpU = new THREE.Vector3();
+  private tmpR = new THREE.Vector3();
+  private tmpZ = new THREE.Vector3();
+  private tmpQ = new THREE.Quaternion();
+  private local = Array.from({ length: JOINT_COUNT }, () => new THREE.Vector3());
+
+  /** Lay the body over world-space ragdoll joints; the trunk, head and boots stay rigid. */
+  poseRagdoll(joints: readonly THREE.Vector3[]) {
+    const scale = this.root.scale.x;
+    const j = this.local;
+    for (let i = 0; i < JOINT_COUNT; i++) j[i].subVectors(joints[i], joints[JOINT.pelvis]).divideScalar(scale);
+    this.root.position.copy(joints[JOINT.pelvis]);
+    this.root.quaternion.identity();
+    this.lean.rotation.set(0, 0, 0);
+
+    // the trunk: up the spine, across the shoulders
+    const up = this.tmpU.copy(j[JOINT.chest]).normalize();
+    const right = this.tmpR.subVectors(j[JOINT.shoulder[1]], j[JOINT.shoulder[0]]);
+    right.addScaledVector(up, -right.dot(up)).normalize();
+    const fwd = this.tmpZ.crossVectors(right, up);
+    this.hips.position.set(0, 0, 0);
+    this.hips.quaternion.setFromRotationMatrix(this.tmpM.makeBasis(right, up, fwd));
+    this.torso.rotation.set(0, 0, 0);
+    const trunk = this.tmpQ.copy(this.hips.quaternion).invert();
+
+    // arms: the upper arm points at the elbow, the elbow folds toward the hand
+    for (let i = 0; i < 2; i++) {
+      const arm = i ? this.armR : this.armL;
+      const y = this.tmpH.subVectors(j[JOINT.shoulder[i]], j[JOINT.elbow[i]]).applyQuaternion(trunk).normalize();
+      const lower = this.tmpF.subVectors(j[JOINT.hand[i]], j[JOINT.elbow[i]]).applyQuaternion(trunk).normalize();
+      const z = this.tmpK.copy(lower).addScaledVector(y, -lower.dot(y));
+      if (z.lengthSq() < 1e-6) z.set(0, 0, 1).addScaledVector(y, -y.z);
+      z.normalize();
+      const x = this.tmpG.crossVectors(y, z);
+      arm.quaternion.setFromRotationMatrix(this.tmpM.makeBasis(x, y, z));
+      this.forearms[i].rotation.set(Math.atan2(-lower.dot(z), -lower.dot(y)), 0, 0);
+    }
+
+    // legs: thigh and shin between the joints, the boot square to the shin with its toe under the knee
+    for (let i = 0; i < 2; i++) {
+      const leg = this.legs[i];
+      const hip = j[JOINT.hip[i]], knee = j[JOINT.knee[i]], foot = j[JOINT.foot[i]];
+      this.placeSegment(leg.thigh, knee, hip);
+      this.placeSegment(leg.shin, foot, knee);
+      leg.knee.position.copy(knee);
+      const y = this.tmpH.subVectors(knee, foot).normalize();
+      const z = this.tmpF.addVectors(hip, foot).multiplyScalar(-0.5).add(knee);
+      z.addScaledVector(y, -z.dot(y));
+      if (z.lengthSq() < 1e-6) z.copy(fwd).addScaledVector(y, -fwd.dot(y));
+      z.normalize();
+      leg.ski.quaternion.setFromRotationMatrix(this.tmpM.makeBasis(this.tmpG.crossVectors(y, z), y, z));
+      leg.ski.position.copy(foot).addScaledVector(y, -ANKLE);
+    }
+  }
+
+  /** Back on the feet: clear the ragdoll's rotations so the animated pose takes over again. */
+  endRagdoll() {
+    this.hips.rotation.set(0, 0, 0);
+    for (const arm of [this.armL, this.armR]) arm.rotation.set(0, 0, 0);
+    this.gear = true;
   }
 
   dispose() {
@@ -296,11 +395,11 @@ export class Skier {
     const k = (r: number) => damp(r, dt);
     const { smoothstep, clamp } = THREE.MathUtils;
     const speedN = Math.min(1, p.speed / 25);
-    const grounded = !p.air && !p.seated && !p.crashed;
+    const grounded = !p.air && !p.seated;
     const skid = grounded ? p.skid ?? 0 : 0;
 
     // --- flight: pop off the lip, fold the knees up (maybe grab), then reach for the snow
-    const flying = p.air && !p.crashed;
+    const flying = p.air;
     if (flying && !this.wasFlying) this.style = (this.style + 1) % AIR_STYLES;
     this.wasFlying = flying;
     const tricks = flying && p.airTime !== undefined;
@@ -348,7 +447,6 @@ export class Skier {
     this.spread = lerp(this.spread, p.air ? 0.02 : p.brake ? 0.18 : 0.06 + Math.abs(lean) * 0.05, k(8));
     this.air = lerp(this.air, p.air ? 1 : 0, k(8));
     this.seat = lerp(this.seat, p.seated ? 1 : 0, k(6));
-    this.flail = lerp(this.flail, p.crashed ? 1 : 0, k(10));
     if (this.skating > 0.05) this.skatePhase += dt * SKATE_RATE;
     this.walk = lerp(this.walk, p.walk ?? 0, k(10));
     this.wave = lerp(this.wave, p.wave ?? 0, k(8));
@@ -391,7 +489,7 @@ export class Skier {
     const tweak = this.style === AIR_SAFETY_L ? -1 : this.style === AIR_SAFETY_R ? 1 : 0;
     for (const leg of this.legs) {
       const s = leg.side;
-      const hip = this.tmpH.set(s * 0.12 + this.hips.position.x, this.hips.position.y, this.hips.position.z);
+      const hip = this.tmpH.set(s * HIP_X + this.hips.position.x, this.hips.position.y, this.hips.position.z);
       // skating: set down under the body, glide, then extend out and back off the inside edge;
       // the spent ski lifts and swings back in while the other leg works
       const u = (this.skatePhase / (Math.PI * 2) + (s > 0 ? 0 : 0.5)) % 1;
@@ -402,7 +500,7 @@ export class Skier {
       const inside = Math.max(0, -s * Math.sign(lean)) * Math.min(1, Math.abs(lean) / 0.6);
       const foot = this.tmpF.set(
         lerp(s * (0.13 + this.spread), s * (0.08 + kick * 0.42), sk),
-        0.25 + (kick * 0.025 + lift * 0.11) * sk,
+        ANKLE + (kick * 0.025 + lift * 0.11) * sk,
         inside * 0.09 + (lift * 0.05 - kick * 0.12) * sk,
       );
       // Lean the torso while keeping both bindings on the snow plane.
@@ -426,7 +524,7 @@ export class Skier {
         foot.y += Math.max(0, s * Math.cos(this.walkPhase)) * 0.07 * this.walk;
       }
       this.solveLeg(leg, hip, foot);
-      leg.ski.position.set(foot.x, foot.y - 0.25, foot.z);
+      leg.ski.position.set(foot.x, foot.y - ANKLE, foot.z);
       // carving rolls the skis further over than the body; skidding flattens and twists them across
       leg.ski.rotation.set(
         this.seat * -0.3 + this.air * -0.12 - this.fold * 0.1 + chatter * 0.03 - lift * sk * 0.12,
@@ -463,8 +561,6 @@ export class Skier {
       out = lerp(out, 0.45, this.reach);
       fwd = lerp(fwd, 0.5, this.seat);
       out = lerp(out, 0.15, this.seat);
-      fwd = lerp(fwd, 2.6 + Math.sin(t * 18 + s) * 0.8, this.flail);
-      out = lerp(out, 1.3, this.flail);
       fwd -= s * stride * 0.45;
       if (s > 0) {
         fwd = lerp(fwd, 2.7, this.wave);

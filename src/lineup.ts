@@ -159,7 +159,7 @@ export class Lineup {
   private pose(index: number, walk: number, wave: number): PoseInput {
     // The others look around idly; the chosen one faces the camera.
     const look = index === this.selected ? 0 : Math.sin(this.time * 0.6 + index * 1.7) * 0.35;
-    return { speed: 0, turn: look, tuck: false, brake: false, air: false, skate: 0, seated: false, crashed: false, squash: 0, walk, wave };
+    return { speed: 0, turn: look, tuck: false, brake: false, air: false, skate: 0, seated: false, squash: 0, walk, wave };
   }
 
   private place(slot: Slot) {

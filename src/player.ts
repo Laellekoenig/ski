@@ -7,6 +7,7 @@ import type { Trails } from "./trails";
 import { BOUNDS, RUN_END, SUMMIT } from "./layout";
 import type { Surface } from "./terrain";
 import { damp, lerp, smoothstep } from "./noise";
+import { Wipeout } from "./wipeout";
 
 const G = 9.81;
 const MU = 0.08;
@@ -32,6 +33,12 @@ const SWING_YAW = 0.5;
 const SWING_SHED = 0.3;
 const SWING_SHED_MAX = 6;
 const SWING_MIN_SPEED = 4;
+/** Landing harder than this into the snow (m/s along its normal) folds the legs and throws the rider. */
+const CRASH_IMPACT = 15;
+/** After a fall: the screen washes out to snow white, the rider is back on the skis, and it clears. */
+const FADE_OUT = 0.35;
+const FADE_HOLD = 0.15;
+const FADE_IN = 0.5;
 /** Down the single snowfield, toward the Engadine backdrop. */
 export const START_HEADING = 0;
 
@@ -41,6 +48,8 @@ export interface PlayerEvents {
   onJump?: () => void;
   onLand?: (impact: number, airTime: number) => void;
   onCrash?: () => void;
+  /** A body part slamming into the snow mid-fall. */
+  onThud?: (impact: number) => void;
   onTrick?: (label: string) => void;
   onSwing?: () => void;
   onFinish?: (runDistance: number) => void;
@@ -62,6 +71,8 @@ export class Player {
   skid = 0;
   surface: Surface = "snow";
   events: PlayerEvents = {};
+  /** 0..1, the white-out that hides getting back up after a fall. */
+  fade = 0;
 
   private world: World;
   private particles: Particles;
@@ -69,8 +80,9 @@ export class Player {
   private n = new THREE.Vector3(0, 1, 0);
   private visN = new THREE.Vector3(0, 1, 0);
   private steer = 0;
-  private crashTimer = 0;
-  private tumble = 0;
+  private wipeout: Wipeout;
+  /** Seconds since the body came to rest. */
+  private recover = 0;
   private squash = 0;
   private spin = 0;
   private sprayAcc = 0;
@@ -96,11 +108,14 @@ export class Player {
   private tmp = new THREE.Vector3();
   private qn = new THREE.Vector3();
   private prev = new THREE.Vector3();
+  private hitVel = new THREE.Vector3();
 
   constructor(world: World, particles: Particles, trails: Trails) {
     this.world = world;
     this.particles = particles;
     this.trails = trails;
+    this.wipeout = new Wipeout(world.scene, world.terrain, particles);
+    this.wipeout.events.onThud = (impact) => this.events.onThud?.(impact);
     world.scene.add(this.skier.root);
     const tex = (() => {
       const c = document.createElement("canvas");
@@ -157,10 +172,14 @@ export class Player {
     this.state = "ski";
     this.grounded = true;
     this.finished = false;
-    this.airTime = this.spin = this.crashTimer = this.tumble = this.steer = this.skid = 0;
+    this.airTime = this.spin = this.recover = this.steer = this.skid = 0;
     this.yawRate = this.accel = this.absorb = this.lastSpeed = 0;
     this.swingT = this.cloudAcc = 0;
     this.lastHeading = this.heading;
+    if (this.wipeout.active) {
+      this.wipeout.clear();
+      this.skier.endRagdoll();
+    }
     this.world.terrain.normalAt(this.pos.x, this.pos.z, this.n);
     this.visN.copy(this.n);
     this.trails.break();
@@ -170,43 +189,60 @@ export class Player {
     this.ducking = input.duck && !input.brake && this.state !== "crash" && !this.finished;
     this.steer = lerp(this.steer, input.steer * (this.ducking ? DUCK_STEER : 1), damp(10, dt));
     this.squash = Math.max(0, this.squash - dt * 2.5);
+    if (this.state !== "crash") this.fade = Math.max(0, this.fade - dt / FADE_IN);
 
+    if (this.state === "crash") {
+      this.updateCrash(dt);
+      return;
+    }
     if (!this.finished) this.updateSki(dt, input);
 
     this.updateVisuals(dt, input);
   }
 
+  /** Ragdolling down the slope; once the body lies still, white out and stand back up on the skis. */
+  private updateCrash(dt: number) {
+    const w = this.wipeout;
+    w.update(dt);
+    this.pos.copy(w.pelvis);
+    this.vel.copy(w.velocity);
+    const t = this.world.terrain;
+    this.grounded = this.pos.y - t.heightAt(this.pos.x, this.pos.z) < 0.4;
+    this.skid = this.grounded ? Math.min(1, this.vel.length() / 6) : 0;
+    this.skier.poseRagdoll(w.joints);
+    this.blob.visible = false;
+    if (w.settled) this.recover += dt;
+    this.fade = Math.min(1, this.recover / FADE_OUT);
+    if (this.recover < FADE_OUT + FADE_HOLD) return;
+
+    // up on the skis where the body came to rest, pointing down the fall line
+    const x = THREE.MathUtils.clamp(this.pos.x, BOUNDS.minX, BOUNDS.maxX);
+    const z = THREE.MathUtils.clamp(this.pos.z, BOUNDS.minZ, BOUNDS.maxZ);
+    const n = t.normalAt(x, z, this.tmp);
+    const heading = Math.hypot(n.x, n.z) > 0.02 ? Math.atan2(n.x, n.z) : this.heading;
+    this.spawnAt(x, z, heading);
+    this.squash = 0.5;
+  }
+
   private updateSki(dt: number, input: InputState) {
     const t = this.world.terrain;
-    const crashed = this.state === "crash";
     const before = this.prev.copy(this.pos);
 
-    if (crashed) {
-      this.crashTimer -= dt;
-      if (this.crashTimer <= 0) {
-        this.state = "ski";
-        this.tumble = 0;
-        this.squash = 0.5;
-      }
-    }
-
-    const tuck = input.tuck && !crashed;
-    const brake = input.brake && !crashed;
-    this.swingT = crashed ? 0 : Math.max(0, this.swingT - dt);
+    const tuck = input.tuck;
+    const brake = input.brake;
+    this.swingT = Math.max(0, this.swingT - dt);
     this.surface = t.surfaceAt(this.pos.x, this.pos.z);
 
     if (this.grounded) {
       t.normalAt(this.pos.x, this.pos.z, this.n);
       const n = this.n;
       const speed = this.vel.length();
-      if (input.swingPressed && !crashed && this.swingT <= 0 && speed > SWING_MIN_SPEED) this.startSwing(input.swingPressed, speed);
+      if (input.swingPressed && this.swingT <= 0 && speed > SWING_MIN_SPEED) this.startSwing(input.swingPressed, speed);
       const swing = this.swingEnvelope();
-      if (!crashed) {
-        const speedN = Math.min(1, speed / 25);
-        const rate = (brake ? 2.8 : 2.4) - speedN * 0.9;
-        // the swing pivots the skis across the line of travel; the momentum keeps going, so they skid
-        this.heading -= (this.steer * rate + this.swingSide * swing * SWING_YAW * Math.PI / (2 * SWING_TIME)) * dt;
-      }
+      const speedN = Math.min(1, speed / 25);
+      const rate = (brake ? 2.8 : 2.4) - speedN * 0.9;
+      // the swing pivots the skis across the line of travel; the momentum keeps going, so they skid
+      this.heading -= (this.steer * rate + this.swingSide * swing * SWING_YAW * Math.PI / (2 * SWING_TIME)) * dt;
       this.fwd.set(Math.sin(this.heading), 0, Math.cos(this.heading));
       this.fwd.addScaledVector(n, -this.fwd.dot(n)).normalize();
       this.lat.crossVectors(n, this.fwd).normalize();
@@ -228,16 +264,16 @@ export class Player {
         // edges grip: sideways motion bleeds off, part of its energy is carved into
         // forward speed. Never more than was lost, so turning can't pump up speed.
         // (a swing skids too, but its speed loss is metered separately below)
-        const grip = crashed ? 1.2 : brake ? 2.2 : swing > 0 ? 3 : 7.5;
+        const grip = brake ? 2.2 : swing > 0 ? 3 : 7.5;
         const newVl = vl * Math.exp(-grip * dt);
-        if (!crashed && !brake) {
+        if (!brake) {
           vf = Math.sign(vf || 1) * Math.sqrt(vf * vf + CARVE_KEEP * (vl * vl - newVl * newVl));
         }
         vl = newVl;
         this.skid = Math.min(1, Math.abs(vl) / 4 + (brake ? Math.min(1, speed / 6) : 0) + swing * 2);
 
         // friction & drag
-        const mu = (crashed ? 0.6 : MU) + (brake ? 0.55 : 0);
+        const mu = MU + (brake ? 0.55 : 0);
         const fr = mu * G * n.y * dt;
         const sv = Math.hypot(vf, vl);
         if (sv > 1e-4) {
@@ -265,7 +301,7 @@ export class Player {
 
         this.vel.copy(this.fwd).multiplyScalar(vf).addScaledVector(this.lat, vl);
 
-        if (input.jumpPressed && !crashed) {
+        if (input.jumpPressed) {
           this.vel.addScaledVector(n, JUMP_POP).y += JUMP_LIFT;
           this.grounded = false;
           this.airTime = 0;
@@ -280,11 +316,9 @@ export class Player {
       this.vel.y -= G * dt;
       const airSpeed = this.vel.length();
       this.vel.multiplyScalar(Math.max(0, 1 - (this.ducking ? DRAG_DUCK : input.tuck ? DRAG_TUCK : DRAG) * airSpeed * dt));
-      if (!crashed) {
-        const spinRate = 6.5 * this.steer;
-        this.heading -= spinRate * dt;
-        this.spin += spinRate * dt;
-      }
+      const spinRate = 6.5 * this.steer;
+      this.heading -= spinRate * dt;
+      this.spin += spinRate * dt;
       this.skid = 0;
     }
 
@@ -315,7 +349,8 @@ export class Player {
         this.pos.y = gy;
       }
     } else if (this.pos.y <= gy) {
-      this.land(gy);
+      this.land(gy, dt);
+      if (this.state === "crash") return;
     }
 
     if (this.grounded) {
@@ -350,26 +385,26 @@ export class Player {
     return this.swingT > 0 ? Math.sin(Math.PI * (1 - this.swingT / SWING_TIME)) : 0;
   }
 
-  private land(gy: number) {
+  private land(gy: number, dt: number) {
     const t = this.world.terrain;
     this.pos.y = gy;
     t.normalAt(this.pos.x, this.pos.z, this.n);
     const vn = this.vel.dot(this.n);
     const impact = Math.max(0, -vn);
+    const hit = this.hitVel.copy(this.vel);
     this.vel.addScaledVector(this.n, -vn);
     this.grounded = true;
     const air = this.airTime;
 
-    if (this.state === "ski" && air > 0.25) {
+    if (air > 0.25) {
       // how well do the skis line up with the direction of travel?
       const hv = Math.hypot(this.vel.x, this.vel.z);
       const fx = Math.sin(this.heading);
       const fz = Math.cos(this.heading);
       const cos = hv > 1 ? (this.vel.x * fx + this.vel.z * fz) / hv : 1;
-      if (hv > 6 && Math.abs(cos) < 0.45) {
-        this.crash();
-      } else if (impact > 17) {
-        this.crash();
+      if ((hv > 6 && Math.abs(cos) < 0.45) || impact > CRASH_IMPACT) {
+        this.crash(hit, dt);
+        return;
       } else {
         if (cos < -0.45) this.heading += Math.PI; // landed switch: spin round
         const turns = Math.round(Math.abs(this.spin) / Math.PI) * 180;
@@ -391,20 +426,16 @@ export class Player {
     }
   }
 
-  private crash() {
+  /** Thrown off the skis with velocity `hit`: from here the ragdoll has the rider until it lies still. */
+  private crash(hit: THREE.Vector3, dt: number) {
     if (this.state === "crash") return;
     this.state = "crash";
-    this.crashTimer = 1.6;
+    this.recover = this.swingT = this.skate = 0;
+    // the skis no longer point anywhere: follow the line the rider was thrown along
+    if (Math.hypot(hit.x, hit.z) > 1) this.heading = Math.atan2(hit.x, hit.z);
     this.trails.break();
     this.events.onCrash?.();
-    for (let i = 0; i < 26; i++) {
-      const a = Math.random() * Math.PI * 2;
-      this.particles.emit(
-        this.tmp.copy(this.pos).add(new THREE.Vector3(0, 0.6, 0)),
-        new THREE.Vector3(Math.cos(a) * 4, 2 + Math.random() * 4, Math.sin(a) * 4),
-        { size: 0.25 + Math.random() * 0.25, life: 1.1, grow: 1.4 },
-      );
-    }
+    this.wipeout.start(this.skier, hit, this.n, dt);
   }
 
   /** Seconds until the current flight meets the snow; also stores where it lands. */
@@ -421,7 +452,6 @@ export class Player {
 
   private updateVisuals(dt: number, input: InputState) {
     const root = this.skier.root;
-    const crashed = this.state === "crash";
     const t = this.world.terrain;
     const speed = this.speed;
     const hv = Math.hypot(this.vel.x, this.vel.z);
@@ -430,7 +460,7 @@ export class Player {
     let dh = Math.atan2(Math.sin(this.heading - this.lastHeading), Math.cos(this.heading - this.lastHeading));
     if (Math.abs(dh) > 1) dh = 0; // landed switch and spun round
     this.lastHeading = this.heading;
-    this.yawRate = lerp(this.yawRate, this.grounded && !crashed ? dh / dt : 0, damp(12, dt));
+    this.yawRate = lerp(this.yawRate, this.grounded ? dh / dt : 0, damp(12, dt));
     // (the arcade turn rate is far tighter than real carving, so the lean eases toward its limit
     // instead of saturating: a gentle curve still leans visibly less than a hard one at speed)
     const edge = -0.75 * Math.tanh(((speed * this.yawRate) / G) * 0.55);
@@ -448,42 +478,34 @@ export class Player {
     // in the air, keep the skis square to the flight path, then match the slope at the landing
     const toGround = this.grounded ? 0 : this.timeToGround();
     const targetN = this.grounded ? this.n : this.tmp.set(-this.vel.y * this.vel.x / Math.max(hv, 1) * 0.5, Math.max(hv, 1), -this.vel.y * this.vel.z / Math.max(hv, 1) * 0.5).normalize();
-    if (!this.grounded && !crashed) {
+    if (!this.grounded) {
       const meet = 1 - THREE.MathUtils.smoothstep(toGround, 0.15, 0.6);
       targetN.lerp(t.normalAt(this.landing.x, this.landing.z, this.qn), meet).normalize();
     }
-    if (!this.grounded && crashed) targetN.copy(UP);
     this.visN.lerp(targetN, damp(this.grounded ? 14 : 3, dt)).normalize();
 
     root.position.copy(this.pos);
     this.qa.setFromUnitVectors(UP, this.visN);
     this.qb.setFromAxisAngle(UP, this.heading);
     root.quaternion.copy(this.qa).multiply(this.qb);
-    if (crashed) {
-      this.tumble += dt * Math.max(2, this.speed * 0.9);
-      const settle = Math.min(1, this.crashTimer / 0.6);
-      root.quaternion.multiply(this.qa.setFromAxisAngle(new THREE.Vector3(1, 0, 0), Math.sin(this.tumble) * 1.3 * settle + (1 - settle) * 0));
-      root.position.y += Math.abs(Math.sin(this.tumble * 0.5)) * 0.4 * settle;
-    }
 
     this.skier.update(dt, {
       speed: this.speed,
-      turn: crashed ? 0 : this.steer,
-      tuck: (input.tuck || this.ducking) && this.skate < 0.5 && !crashed,
+      turn: this.steer,
+      tuck: (input.tuck || this.ducking) && this.skate < 0.5,
       duck: this.ducking,
-      brake: input.brake && !crashed,
+      brake: input.brake,
       air: !this.grounded && this.airTime > 0.1,
       skate: this.skate,
       seated: false,
-      crashed,
       squash: this.squash,
-      edge: crashed ? 0 : edge,
+      edge,
       accel: this.accel,
       absorb: this.absorb,
       skid: this.skid,
       airTime: this.airTime,
       toGround,
-      spin: this.grounded || crashed ? 0 : 6.5 * this.steer,
+      spin: this.grounded ? 0 : 6.5 * this.steer,
     });
 
     // blob shadow
@@ -498,7 +520,7 @@ export class Player {
     (this.blob.material as THREE.MeshBasicMaterial).opacity = s;
 
     // tracks + spray
-    if (this.grounded && !crashed && this.speed > 0.5) {
+    if (this.grounded && this.speed > 0.5) {
       this.trails.add(this.pos, this.lat, 0.15);
     } else {
       this.trails.break();
@@ -521,7 +543,7 @@ export class Player {
       }
     }
     // swing: a soft cloud of powder thrown out from the edges, hanging in the air a moment
-    if (this.grounded && !crashed && this.swingT > 0) {
+    if (this.grounded && this.swingT > 0) {
       this.cloudAcc += 90 * this.swingEnvelope() * dt;
       const side = Math.sign(this.vel.dot(this.lat)) || -this.swingSide;
       while (this.cloudAcc > 1) {

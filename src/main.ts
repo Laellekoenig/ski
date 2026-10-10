@@ -94,6 +94,7 @@ player.events = {
   onJump: () => audio.jump(),
   onLand: (impact) => audio.land(impact),
   onCrash: () => audio.crash(),
+  onThud: (impact) => audio.thud(impact),
   onTrick: () => audio.trick(),
   onSwing: () => audio.swing(),
   onFinish: endRun,
@@ -193,7 +194,8 @@ function updateCamera(dt: number) {
     // follow the direction of travel when moving, otherwise the way the skis point
     const hv = Math.hypot(player.vel.x, player.vel.z);
     let targetYaw = player.heading;
-    if (hv > 3) {
+    // tumbling, the body's velocity is all over the place: hold the line it was thrown along
+    if (hv > 3 && player.state !== "crash") {
       const velYaw = Math.atan2(player.vel.x, player.vel.z);
       let d = velYaw - player.heading;
       d = Math.atan2(Math.sin(d), Math.cos(d));
@@ -203,8 +205,10 @@ function updateCamera(dt: number) {
     dy = Math.atan2(Math.sin(dy), Math.cos(dy));
     camYaw += dy * damp(player.state === "crash" ? 0.5 : 3.2, dt);
     const summitView = Math.max(0, 1 - Math.hypot(p.x, p.z) / 100);
-    const dist = 3.4 + Math.min(speed, 30) * 0.04 + summitView * 1;
-    const height = 1.75 + Math.min(speed, 30) * 0.012 + summitView * 1;
+    // pull back a little to take in a fall, with the gear flying off around the rider
+    const fall = player.state === "crash" ? 1 : 0;
+    const dist = 3.4 + Math.min(speed, 30) * 0.04 + summitView * 1 + fall * 2;
+    const height = 1.75 + Math.min(speed, 30) * 0.012 + summitView * 1 + fall * 0.9;
     const want = tmpV.set(p.x - Math.sin(camYaw) * dist, p.y + height, p.z - Math.cos(camYaw) * dist);
     // the slope ahead is lower: keep the camera above the ground behind us
     const ground = world.terrain.heightAt(want.x, want.z) + 1.6;
@@ -300,7 +304,7 @@ let acc = 0;
 let last = performance.now();
 
 function updateHud() {
-  hud.update(player.runDistance, player.finished);
+  hud.update(player.runDistance, player.finished, player.fade);
 }
 
 function frame(now: number) {
