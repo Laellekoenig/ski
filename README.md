@@ -31,6 +31,8 @@ Choose one of seven human riders with **1–7**, left/right arrows, or their nam
 | Mouse drag | look around; release to return to the follow camera |
 | `M` | mute |
 
+**Carving:** while a turn is held, a small meter beside the rider's leg fills up. Let go of the turn (or switch to the other side) while the marker is in the green to carve out of it with a burst of speed. Hold on until it reaches the red and the skis wash out, scrubbing off speed until you let go. Gentle `Q` / `E` curves fill slowly and have a wide green zone. Hard `A` / `D` turns fill fast, have a narrow zone and give a slightly bigger boost. The boost fades out toward 26 m/s, so carving cannot push past a sensible top speed.
+
 Gamepads: left stick steers, A jumps, triggers tuck/brake, right bumper ducks, Y resets, Start pauses.
 
 Always use `?silent` when testing or taking screenshots. Automated browsers (`navigator.webdriver`) are also silent.
@@ -71,9 +73,10 @@ The importer caches downloads in the system temporary directory, decodes the sou
 - `src/engadine.ts`, `src/data/`: bundled terrain loading and geographic elevation sampling
 - `src/world.ts`: winter sky with thin drifting clouds, atmospheric haze, and lighting
 - `src/weather.ts`: sparse, subtle diamond dust (the snow reflections live in `src/materials.ts`)
-- `src/player.ts`: carving, ducking, braking, swings, jumps, landings, switch riding, and run completion
+- `src/player.ts`: carving and carve timing, ducking, braking, swings, jumps, landings, switch riding, and run completion
 - `src/skier.ts`, `src/characters.ts`, `src/gear.ts`, `src/equipment.ts`: four articulated skiers with smooth lathed and lofted bodies, shaped skis and bindings
 - `src/looks.ts`: printed outfits, painted faces, hair and headwear
+- `src/hud.ts`: run distance, the white-out after a fall, and the carve meter
 - `src/lineup.ts`: character selection and the transition onto skis
 
 ## Verification

@@ -34,7 +34,7 @@ const RIGHT = ["KeyD", "ArrowRight"];
 /** Q / E: a wider, gentler curve than A / D. */
 const GENTLE_LEFT = ["KeyQ"];
 const GENTLE_RIGHT = ["KeyE"];
-const GENTLE_STEER = 0.4;
+export const GENTLE_STEER = 0.4;
 const UP = ["KeyW", "ArrowUp"];
 const DOWN = ["KeyS", "ArrowDown"];
 const DUCK = ["ShiftLeft", "ShiftRight"];

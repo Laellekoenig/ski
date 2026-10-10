@@ -132,6 +132,16 @@ export class Audio {
   swing() {
     this.burst(0.45, 2600, 0.35);
   }
+  /** Sprung out of a well-timed turn. */
+  carve() {
+    this.tone(660, 990, 0.12, "triangle", 0.12);
+    this.tone(990, 1320, 0.16, "triangle", 0.1, 0.06);
+  }
+  /** Held the turn too long: the edges let go. */
+  washOut() {
+    this.burst(0.35, 1800, 0.3);
+    this.tone(220, 140, 0.2, "square", 0.04);
+  }
   crash() {
     this.burst(0.6, 1500, 0.6);
     this.tone(500, 140, 0.45, "triangle", 0.18);
