@@ -31,7 +31,7 @@ Choose one of seven human riders with **1–7**, left/right arrows, or their nam
 | Mouse drag | look around; release to return to the follow camera |
 | `M` | mute |
 
-**Carving:** while a turn is held, a small meter beside the rider's leg fills up. Switch to the other side while the marker is in the green to carve out of the turn with a burst of speed. Letting go of the turn without switching earns no boost, but costs nothing either: the marker keeps rising, so you can still press the other side while it passes through the green. Hold on until it reaches the red and the skis wash out, scrubbing off speed until you let go. Gentle `Q` / `E` curves fill slowly and have a wide green zone. Hard `A` / `D` turns fill fast, have a narrow zone and give a slightly bigger boost. The boost fades out toward 26 m/s, so carving cannot push past a sensible top speed.
+**Carving:** while a turn is held, the skis and boots warm up with a soft orange glow, then flare bright when the timing is right. Switch to the other side while they flare to carve out of the turn with a burst of speed and a shower of sparks. Switching too early, or holding on until the flare passes, costs no speed, but the glow goes out. Letting go of the turn without switching earns no boost and costs nothing: the timing keeps running, so you can still press the other side while the skis flare. Carves in a row build a streak that keeps the gear lit and burns it hotter, from ember orange to white-gold. Fly flat out (around 20 m/s and up) with a streak going and the boots catch fire. Braking, swinging, or slowing right down ends the streak. Gentle `Q` / `E` curves warm up slowly and flare for longer. Hard `A` / `D` turns warm up fast, flare only briefly and give a slightly bigger boost. The boost fades out toward 26 m/s, so carving cannot push past a sensible top speed.
 
 Gamepads: left stick steers, A jumps, triggers tuck/brake, right bumper ducks, Y resets, Start pauses.
 
@@ -76,7 +76,7 @@ The importer caches downloads in the system temporary directory, decodes the sou
 - `src/player.ts`: carving and carve timing, ducking, braking, swings, jumps, landings, switch riding, and run completion
 - `src/skier.ts`, `src/characters.ts`, `src/gear.ts`, `src/equipment.ts`: four articulated skiers with smooth lathed and lofted bodies, shaped skis and bindings
 - `src/looks.ts`: printed outfits, painted faces, hair and headwear
-- `src/hud.ts`: run distance, the white-out after a fall, and the carve meter
+- `src/hud.ts`: run distance and the white-out after a fall
 - `src/lineup.ts`: character selection and the transition onto skis
 
 ## Verification

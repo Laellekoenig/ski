@@ -24,6 +24,30 @@ const GRIP = 0.267;
 const SKATE_RATE_START = 4.4;
 const SKATE_RATE_RUNNING = 2.5;
 const UP = new THREE.Vector3(0, 1, 0);
+/** Carve glow: embers orange while it is just warming up, white-gold once a streak burns hot. */
+const GLOW_WARM = new THREE.Color(0xff6a1a);
+const GLOW_HOT = new THREE.Color(0xffd890);
+/** The haze round the boots stays saturated, or it would vanish into the snow behind. */
+const HALO_WARM = new THREE.Color(0xff6414);
+const HALO_HOT = new THREE.Color(0xffa424);
+let haloMap: THREE.CanvasTexture | undefined;
+
+/** Soft round light, for the glow around the boots. */
+function haloTexture() {
+  if (haloMap) return haloMap;
+  const canvas = document.createElement("canvas");
+  canvas.width = canvas.height = 64;
+  const ctx = canvas.getContext("2d")!;
+  const gradient = ctx.createRadialGradient(32, 32, 0, 32, 32, 32);
+  gradient.addColorStop(0, "rgba(255,255,255,1)");
+  gradient.addColorStop(0.3, "rgba(255,255,255,0.45)");
+  gradient.addColorStop(1, "rgba(255,255,255,0)");
+  ctx.fillStyle = gradient;
+  ctx.fillRect(0, 0, 64, 64);
+  haloMap = new THREE.CanvasTexture(canvas);
+  haloMap.colorSpace = THREE.SRGBColorSpace;
+  return haloMap;
+}
 
 export interface PoseInput {
   speed: number;
@@ -112,6 +136,9 @@ export class Skier {
   private legs: Leg[] = [];
   /** These materials belong to this rider; shared fabric and equipment materials are cached. */
   private ownedMaterials: THREE.Material[] = [];
+  /** Lit copies of the ski and boot materials and the halos round the boots, made the first time they glow. */
+  private glowing?: { materials: THREE.MeshStandardMaterial[]; halos: THREE.Sprite[] };
+  private glowColor = new THREE.Color();
 
   private forearms: THREE.Group[] = [];
 
@@ -278,6 +305,57 @@ export class Skier {
     up.setFromMatrixColumn(board.matrixWorld, 1).normalize();
   }
 
+  /** World-space middle of boot `i`. */
+  bootAt(i: number, out: THREE.Vector3) {
+    return this.legs[i].ski.localToWorld(out.set(0, 0.17, 0));
+  }
+
+  /** Skis and boots lit from within: `glow` 0..1 how bright, `heat` 0..1 from ember orange to white-gold. */
+  setGlow(glow: number, heat: number) {
+    if (glow <= 0.002 && !this.glowing) return;
+    const g = this.glowing ??= this.lightGear();
+    const color = this.glowColor.copy(GLOW_WARM).lerp(GLOW_HOT, heat);
+    // eased in, so a turn warming up stays an ember next to the flare of the sweet spot
+    const strength = glow ** 1.5 * lerp(1.1, 2.4, heat);
+    for (const material of g.materials) {
+      material.emissive.copy(color);
+      material.emissiveIntensity = strength;
+    }
+    for (const halo of g.halos) {
+      halo.visible = glow > 0.002;
+      halo.material.color.copy(HALO_WARM).lerp(HALO_HOT, heat);
+      halo.material.opacity = glow * lerp(0.45, 0.75, heat);
+      halo.scale.setScalar(lerp(0.95, 1.5, heat) * (0.6 + glow * 0.4));
+    }
+  }
+
+  /** The ski and boot materials are shared between riders, so this one gets its own to light up. */
+  private lightGear() {
+    const lit = new Map<THREE.Material, THREE.MeshStandardMaterial>();
+    const swap = (material: THREE.Material) => {
+      let copy = lit.get(material);
+      if (!copy) {
+        copy = (material as THREE.MeshStandardMaterial).clone();
+        // printed topsheets shine through their own pattern
+        copy.emissiveMap = copy.map;
+        lit.set(material, copy);
+      }
+      return copy;
+    };
+    const halos: THREE.Sprite[] = [];
+    for (const leg of this.legs) {
+      leg.ski.traverse((part) => {
+        if (part instanceof THREE.Mesh) part.material = Array.isArray(part.material) ? part.material.map(swap) : swap(part.material);
+      });
+      // tinted rather than added: added light would wash out to nothing against bright snow
+      const halo = new THREE.Sprite(new THREE.SpriteMaterial({ map: haloTexture(), transparent: true, depthWrite: false }));
+      halo.position.set(0, 0.15, 0.02);
+      leg.ski.add(halo);
+      halos.push(halo);
+    }
+    return { materials: [...lit.values()], halos };
+  }
+
   /** World-space grip and tip of a pole. */
   poleEnds(i: number, grip: THREE.Vector3, tip: THREE.Vector3) {
     const pole = i ? this.poleR : this.poleL;
@@ -355,6 +433,9 @@ export class Skier {
       if (material instanceof THREE.MeshStandardMaterial) material.map?.dispose();
       material.dispose();
     }
+    // the lit copies share their textures with the cached originals
+    for (const material of this.glowing?.materials ?? []) material.dispose();
+    for (const halo of this.glowing?.halos ?? []) halo.material.dispose();
   }
 
   private placeSegment(m: THREE.Mesh, a: THREE.Vector3, b: THREE.Vector3) {

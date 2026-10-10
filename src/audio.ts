@@ -132,15 +132,15 @@ export class Audio {
   swing() {
     this.burst(0.45, 2600, 0.35);
   }
-  /** Sprung out of a well-timed turn. */
-  carve() {
-    this.tone(660, 990, 0.12, "triangle", 0.12);
-    this.tone(990, 1320, 0.16, "triangle", 0.1, 0.06);
+  /** Sprung out of a well-timed turn: each carve in a streak rings a step higher. */
+  carve(streak = 1) {
+    const up = 2 ** (Math.min(streak - 1, 7) / 12 * 2);
+    this.tone(660 * up, 990 * up, 0.12, "triangle", 0.12);
+    this.tone(990 * up, 1320 * up, 0.16, "triangle", 0.1, 0.06);
   }
-  /** Held the turn too long: the edges let go. */
-  washOut() {
-    this.burst(0.35, 1800, 0.3);
-    this.tone(220, 140, 0.2, "square", 0.04);
+  /** The carve glow going out. */
+  fizzle() {
+    this.burst(0.22, 3200, 0.12);
   }
   crash() {
     this.burst(0.6, 1500, 0.6);

@@ -34,21 +34,24 @@ const SWING_SHED = 0.3;
 const SWING_SHED_MAX = 6;
 const SWING_MIN_SPEED = 4;
 /**
- * Carve timing: holding a turn fills the meter by the rider's leg. Switch to the other edge
- * in the sweet spot for a burst of speed; hold on into the red and the skis wash out, scrubbing speed.
- * Letting go short of the red costs nothing, but only the edge change earns the boost.
- * Gentle Q / E curves fill slowly with a wide sweet spot, hard A / D turns fill fast with a narrow one.
+ * Carve timing: holding a turn warms the skis and boots up until they flare bright in the sweet spot.
+ * Switch to the other edge then for a burst of speed and a shower of sparks. Switching early or holding
+ * on past it costs no speed, but the glow goes out. Letting go costs nothing either, but only the edge
+ * change earns the boost. Gentle Q / E curves fill slowly with a wide sweet spot, hard A / D turns fill
+ * fast with a narrow one.
  */
 const CARVE_MIN_SPEED = 5;
 const CARVE_FILL_GENTLE = 1.5;
 const CARVE_FILL_HARD = 0.85;
 const CARVE_SWEET = 0.7;
-/** Half the sweet spot's height on the meter. */
+/** Half the sweet spot's width, in charge. */
 const CARVE_SWEET_GENTLE = 0.13;
 const CARVE_SWEET_HARD = 0.05;
-const CARVE_RED = 0.9;
-/** Speed lost per second while the meter sits in the red, in m/s². */
-const CARVE_SCRUB = 4.5;
+/** Carves in a row for the glow to burn its hottest. */
+const CARVE_STREAK_FULL = 6;
+/** Flat out with a streak lit, the boots catch fire: from this speed, fully ablaze by this one (m/s). */
+const FIRE_FROM = 19;
+const FIRE_FULL = 22;
 /** Speed a well-timed carve adds, in m/s, eased in over a moment. */
 const CARVE_BOOST_GENTLE = 1.1;
 const CARVE_BOOST_HARD = 1.6;
@@ -76,20 +79,19 @@ export const START_HEADING = 0;
 
 export type PlayerState = "ski" | "crash";
 
-/** The carve meter by the rider's leg, all heights 0 (bottom) .. 1 (top). */
-export interface CarveMeter {
+/** Timing of the turn in progress, 0 (just begun) .. 1 (held far too long). */
+export interface CarveTiming {
   /** -1 / 1 while a turn is held, 0 once it's let go */
   side: number;
   charge: number;
   sweetLo: number;
   sweetHi: number;
-  red: number;
-  /** this turn was held into the red */
-  wash: boolean;
+  /** this turn was held on past the sweet spot */
+  late: boolean;
+  /** well-timed edge changes in a row */
+  streak: number;
   /** seconds since the last well-timed edge change */
   carved: number;
-  /** seconds since the turn was let go */
-  released: number;
 }
 
 export interface PlayerEvents {
@@ -100,8 +102,9 @@ export interface PlayerEvents {
   onThud?: (impact: number) => void;
   onTrick?: (label: string) => void;
   onSwing?: () => void;
-  onCarve?: () => void;
-  onWashOut?: () => void;
+  onCarve?: (streak: number) => void;
+  /** The carve glow went out: an edge change missed, or the streak cooled off. */
+  onMiss?: () => void;
   onFinish?: (runDistance: number) => void;
 }
 
@@ -125,7 +128,7 @@ export class Player {
   fade = 0;
   /** Riding backwards: the tails lead, after landing a 180 or spinning one off a hop. */
   switch = false;
-  readonly carve: CarveMeter = { side: 0, charge: 0, sweetLo: 0, sweetHi: 0, red: CARVE_RED, wash: false, carved: Infinity, released: Infinity };
+  readonly carve: CarveTiming = { side: 0, charge: 0, sweetLo: 0, sweetHi: 0, late: false, streak: 0, carved: Infinity };
 
   private world: World;
   private particles: Particles;
@@ -150,6 +153,12 @@ export class Player {
   private carveHard = 0;
   private boostT = 0;
   private boostAcc = 0;
+  /** 0..1 shine of the skis and boots, 0..1 how hard the boots burn, and the sparks or smoke still to throw. */
+  private glow = 0;
+  private fire = 0;
+  private flameAcc = 0;
+  private sparks = 0;
+  private smoke = false;
   /** Smoothed pose signals for the rider's animation. */
   private yawRate = 0;
   private accel = 0;
@@ -158,6 +167,7 @@ export class Player {
   private lastSpeed = 0;
   private landing = new THREE.Vector3();
   private blob: THREE.Mesh;
+  private pool: THREE.Mesh;
   private qa = new THREE.Quaternion();
   private qb = new THREE.Quaternion();
   private fwd = new THREE.Vector3();
@@ -166,6 +176,8 @@ export class Player {
   private qn = new THREE.Vector3();
   private prev = new THREE.Vector3();
   private hitVel = new THREE.Vector3();
+  private boot = new THREE.Vector3();
+  private sparkVel = new THREE.Vector3();
 
   constructor(world: World, particles: Particles, trails: Trails) {
     this.world = world;
@@ -174,22 +186,29 @@ export class Player {
     this.wipeout = new Wipeout(world.scene, world.terrain, particles);
     this.wipeout.events.onThud = (impact) => this.events.onThud?.(impact);
     world.scene.add(this.skier.root);
-    const tex = (() => {
+    const tex = (inner: string, outer: string) => {
       const c = document.createElement("canvas");
       c.width = c.height = 64;
       const ctx = c.getContext("2d")!;
       const g = ctx.createRadialGradient(32, 32, 0, 32, 32, 32);
-      g.addColorStop(0, "rgba(40,50,90,0.55)");
-      g.addColorStop(1, "rgba(40,50,90,0)");
+      g.addColorStop(0, inner);
+      g.addColorStop(1, outer);
       ctx.fillStyle = g;
       ctx.fillRect(0, 0, 64, 64);
       return new THREE.CanvasTexture(c);
-    })();
+    };
     this.blob = new THREE.Mesh(
       new THREE.PlaneGeometry(1.6, 2.2),
-      new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -6 }),
+      new THREE.MeshBasicMaterial({ map: tex("rgba(40,50,90,0.55)", "rgba(40,50,90,0)"), transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -6 }),
     );
     world.scene.add(this.blob);
+    // the glowing skis light up the snow around them
+    this.pool = new THREE.Mesh(
+      new THREE.PlaneGeometry(1.3, 2.6),
+      new THREE.MeshBasicMaterial({ map: tex("rgba(255,255,255,1)", "rgba(255,255,255,0)"), color: 0xff8a2a, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -7 }),
+    );
+    this.pool.visible = false;
+    world.scene.add(this.pool);
   }
 
   get speed() {
@@ -216,6 +235,7 @@ export class Player {
   /** Hide the skier and its blob shadow, e.g. while the lineup is on stage. */
   set visible(visible: boolean) {
     this.skier.root.visible = this.blob.visible = visible;
+    if (!visible) this.pool.visible = false;
   }
 
   /** Every new run starts at the top of the snowfield. */
@@ -238,7 +258,7 @@ export class Player {
     this.airTime = this.spin = this.recover = this.steer = this.skid = 0;
     this.yawRate = this.accel = this.absorb = this.lastSpeed = 0;
     this.swingT = this.cloudAcc = this.boostT = 0;
-    this.endCarve(true);
+    this.resetCarve();
     this.lastHeading = this.heading;
     if (this.wipeout.active) {
       this.wipeout.clear();
@@ -335,8 +355,7 @@ export class Player {
           vf = Math.sign(vf || 1) * Math.sqrt(vf * vf + CARVE_KEEP * (vl * vl - newVl * newVl));
         }
         vl = newVl;
-        const washing = this.carve.side !== 0 && this.carve.charge >= CARVE_RED;
-        this.skid = Math.min(1, Math.abs(vl) / 4 + (brake ? Math.min(1, speed / 6) : 0) + swing * 2 + (washing ? 0.6 : 0));
+        this.skid = Math.min(1, Math.abs(vl) / 4 + (brake ? Math.min(1, speed / 6) : 0) + swing * 2);
 
         // friction & drag
         const mu = MU + (brake ? 0.55 : 0);
@@ -355,18 +374,11 @@ export class Player {
           vf *= f;
           vl *= f;
         }
-        // held too long: the edges let go and the skis chatter sideways
-        const sc = Math.hypot(vf, vl);
-        if (washing && sc > 1e-4) {
-          const f = Math.max(0, sc - CARVE_SCRUB * dt) / sc;
-          vf *= f;
-          vl *= f;
-        }
         // a timed carve springs out of the turn, fading out toward the top speed
         if (this.boostT > 0) {
           const step = Math.min(dt, this.boostT);
           this.boostT -= step;
-          vf += Math.sign(vf || 1) * this.boostAcc * (1 - smoothstep(CARVE_TOP_SPEED - CARVE_FADE, CARVE_TOP_SPEED, sc)) * step;
+          vf += Math.sign(vf || 1) * this.boostAcc * (1 - smoothstep(CARVE_TOP_SPEED - CARVE_FADE, CARVE_TOP_SPEED, Math.hypot(vf, vl))) * step;
         }
 
         // skating / pushing off: only gets you going on the flat, it can't beat
@@ -392,8 +404,7 @@ export class Player {
       }
     } else {
       // airborne
-      if (this.carve.side) this.endCarve();
-      this.carve.released += dt;
+      this.endCarve();
       this.carve.carved += dt;
       this.airTime += dt;
       this.vel.y -= G * dt;
@@ -449,7 +460,7 @@ export class Player {
       this.grounded = true;
       this.state = "ski";
       this.skid = this.steer = this.skate = this.boostT = 0;
-      this.endCarve(true);
+      this.resetCarve();
       this.trails.break();
       this.events.onFinish?.(this.runDistance);
     }
@@ -462,27 +473,32 @@ export class Player {
     else if (this.grounded && hv < 0.3) this.switch = false;
   }
 
-  /** Fill the meter while a turn is held; switching to the other edge is the moment that counts. */
+  /** Time the turn while it is held; switching to the other edge is the moment that counts. */
   private carveTurn(dt: number, input: InputState, speed: number, swing: number) {
     const c = this.carve;
-    c.released += dt;
     c.carved += dt;
     const side = Math.abs(input.steer) > 0.15 ? Math.sign(input.steer) : 0;
-    if (c.side && (input.brake || swing > 0)) this.endCarve();
+    // braking, swinging or slowing right down cools the skis off
+    if (input.brake || swing > 0 || speed < CARVE_MIN_SPEED) {
+      this.endCarve();
+      if (c.streak) this.loseStreak();
+    }
     if (c.side && side === -c.side) {
       if (c.charge >= c.sweetLo && c.charge <= c.sweetHi) {
         c.carved = 0;
+        c.streak++;
         this.boostT = CARVE_BOOST_TIME;
         this.boostAcc = lerp(CARVE_BOOST_GENTLE, CARVE_BOOST_HARD, this.carveHard) / CARVE_BOOST_TIME;
         this.squash = Math.max(this.squash, 0.2);
-        this.events.onCarve?.();
-      }
+        this.sparks = c.side;
+        this.events.onCarve?.(c.streak);
+      } else if (!c.late) this.loseStreak();
       this.endCarve();
     }
     if (side && !c.side && speed > CARVE_MIN_SPEED && !input.brake && swing <= 0) {
       c.side = side;
       c.charge = 0;
-      c.wash = false;
+      c.late = false;
     }
     if (!c.side) return;
     // let go: the edges flatten without a penalty, and the meter runs on so the edge change
@@ -500,20 +516,35 @@ export class Player {
       c.sweetLo = CARVE_SWEET - half;
       c.sweetHi = CARVE_SWEET + half;
     }
-    const was = c.charge;
     c.charge = Math.min(1, c.charge + dt / lerp(CARVE_FILL_GENTLE, CARVE_FILL_HARD, this.carveHard));
-    if (held && was < CARVE_RED && c.charge >= CARVE_RED) {
-      c.wash = true;
-      this.events.onWashOut?.();
+    // held on past the sweet spot: no harm to the speed, but the glow goes out
+    if (held && !c.late && c.charge > c.sweetHi) {
+      c.late = true;
+      this.loseStreak(true);
     }
   }
 
-  /** Let go of the turn: the meter holds where it stopped, then fades (or vanishes at once with `hide`). */
-  private endCarve(hide = false) {
-    if (hide) this.carve.released = Infinity;
-    if (!this.carve.side) return;
+  private endCarve() {
     this.carve.side = 0;
-    if (!hide) this.carve.released = 0;
+  }
+
+  /** Out of rhythm: the streak is over and the glow goes out, with a fizzle if it was lit. */
+  private loseStreak(lit = this.carve.streak > 0) {
+    this.carve.streak = 0;
+    if (!lit) return;
+    this.smoke = true;
+    this.events.onMiss?.();
+  }
+
+  /** A fresh start: no turn, no streak, no glow. */
+  private resetCarve() {
+    const c = this.carve;
+    c.side = c.streak = 0;
+    c.late = false;
+    c.carved = Infinity;
+    this.glow = this.fire = this.sparks = 0;
+    this.smoke = false;
+    this.skier.setGlow(0, 0);
   }
 
   /** `side` 0 pivots nowhere: the skis just skid, as after a crooked landing. */
@@ -586,7 +617,8 @@ export class Player {
     if (this.state === "crash") return;
     this.state = "crash";
     this.recover = this.swingT = this.skate = this.boostT = 0;
-    this.endCarve(true);
+    this.resetCarve();
+    this.pool.visible = false;
     // the skis no longer point anywhere: follow the line the rider was thrown along
     if (Math.hypot(hit.x, hit.z) > 1) this.heading = Math.atan2(hit.x, hit.z);
     this.trails.break();
@@ -719,5 +751,87 @@ export class Player {
         );
       }
     } else this.cloudAcc = 0;
+
+    this.updateGlow(dt, speed, gy);
+  }
+
+  /** Skis and boots lit up by the carve timing, plus the sparks, flames and smoke that go with it. */
+  private updateGlow(dt: number, speed: number, gy: number) {
+    const c = this.carve;
+    const heat = Math.min(1, c.streak / CARVE_STREAK_FULL);
+    // a turn warms the skis up as it goes and they flare bright in the sweet spot; a streak keeps them lit
+    let cue = 0;
+    if (c.side && !c.late) {
+      cue = c.charge < c.sweetLo ? 0.5 * smoothstep(0.1, c.sweetLo, c.charge) : c.charge <= c.sweetHi ? 1 : 0;
+    }
+    const lit = c.streak ? lerp(0.3, 0.6, heat) : 0;
+    const glow = Math.max(lit, cue);
+    this.glow = lerp(this.glow, glow, damp(glow > this.glow ? 30 : 9, dt));
+    const fire = c.streak ? smoothstep(FIRE_FROM, FIRE_FULL, speed) : 0;
+    this.fire = lerp(this.fire, fire, damp(fire > this.fire ? 4 : 10, dt));
+    this.skier.setGlow(Math.max(this.glow, this.fire), Math.max(heat, this.fire));
+
+    const pool = this.pool;
+    const shine = this.grounded ? Math.max(this.glow, this.fire) * (0.3 + 0.4 * heat) : 0;
+    pool.visible = shine > 0.01;
+    if (pool.visible) {
+      pool.position.set(this.pos.x, gy + 0.06, this.pos.z);
+      pool.quaternion.copy(this.blob.quaternion);
+      (pool.material as THREE.MeshBasicMaterial).opacity = shine;
+    }
+
+    if (!this.sparks && !this.smoke && this.fire < 0.02) {
+      this.flameAcc = 0;
+      return;
+    }
+    this.skier.root.updateMatrixWorld();
+    if (this.sparks) {
+      // a shower of sparks off the edges, thrown to the outside of the turn just finished, and a lick of flame
+      const out = -this.sparks;
+      const n = 20 + Math.min(c.streak, CARVE_STREAK_FULL) * 5;
+      for (let i = 0; i < n; i++) {
+        const p = this.tmp.copy(this.pos).addScaledVector(this.fwd, -0.7 + Math.random() * 1.5).addScaledVector(this.lat, out * 0.08);
+        p.y += 0.05;
+        this.sparkVel.set((Math.random() - 0.5) * 1.5, 1.5 + Math.random() * 3, (Math.random() - 0.5) * 1.5)
+          .addScaledVector(this.vel, 0.9)
+          .addScaledVector(this.lat, out * (1.5 + Math.random() * 3.5));
+        this.particles.emit(p, this.sparkVel, { size: 0.045 + Math.random() * 0.04, life: 0.25 + Math.random() * 0.35, gravity: 0.9, drag: 1.5, color: SPARK[i % SPARK.length] });
+      }
+      for (let i = 0; i < 2; i++) for (let k = 0; k < 6 + heat * 6; k++) this.flame(i, 1 + heat * 0.5);
+      this.sparks = 0;
+    }
+    if (this.smoke) {
+      // the glow goes out in a little puff
+      for (let i = 0; i < 2; i++) {
+        this.skier.bootAt(i, this.boot);
+        for (let k = 0; k < 5; k++) {
+          this.particles.emit(this.boot, this.sparkVel.set((Math.random() - 0.5) * 0.8, 0.6 + Math.random() * 0.8, (Math.random() - 0.5) * 0.8).addScaledVector(this.vel, 0.6), {
+            size: 0.07 + Math.random() * 0.06, life: 0.5 + Math.random() * 0.4, grow: 2.4, gravity: -0.05, drag: 2, color: 0x9aa0a8,
+          });
+        }
+      }
+      this.smoke = false;
+    }
+    // shoes on fire: flames stream back off the boots
+    this.flameAcc += this.fire * 140 * dt;
+    while (this.flameAcc > 1) {
+      this.flameAcc -= 1;
+      this.flame(Math.random() < 0.5 ? 0 : 1, this.fire);
+    }
+  }
+
+  /** One lick of flame off boot `i`, `size` 0..1. */
+  private flame(i: number, size: number) {
+    this.skier.bootAt(i, this.boot);
+    this.boot.x += (Math.random() - 0.5) * 0.12;
+    this.boot.z += (Math.random() - 0.5) * 0.12;
+    this.boot.y += Math.random() * 0.1;
+    this.sparkVel.set((Math.random() - 0.5) * 0.6, 0.4 + Math.random() * 0.9, (Math.random() - 0.5) * 0.6).addScaledVector(this.vel, 0.95);
+    this.particles.emit(this.boot, this.sparkVel, {
+      size: (0.1 + Math.random() * 0.1) * size, life: 0.18 + Math.random() * 0.2, grow: 0.3, gravity: -0.3, drag: 0, color: FLAME[Math.floor(Math.random() * FLAME.length)],
+    });
   }
 }
+
+const SPARK = [0xffea8a, 0xffb820, 0xff7a10];
+const FLAME = [0xffd23a, 0xff9a1a, 0xff6410, 0xe8380c];
