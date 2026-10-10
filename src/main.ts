@@ -119,7 +119,7 @@ let introHeight = 0;
 const introLook = new THREE.Vector3();
 
 function snapCamera() {
-  camYaw = player.heading;
+  camYaw = player.facing;
   camPos.copy(player.pos).add(new THREE.Vector3(-Math.sin(camYaw) * 3.4, 1.75, -Math.cos(camYaw) * 3.4));
   camLook.copy(player.pos).add(new THREE.Vector3(Math.sin(camYaw) * 6, 0.9, Math.cos(camYaw) * 6));
 }
@@ -194,13 +194,15 @@ function updateCamera(dt: number) {
     const speed = player.speed;
     // follow the direction of travel when moving, otherwise the way the skis point
     const hv = Math.hypot(player.vel.x, player.vel.z);
-    let targetYaw = player.heading;
+    // (riding switch, that is the way the tails point)
+    const facing = player.facing;
+    let targetYaw = facing;
     // tumbling, the body's velocity is all over the place: hold the line it was thrown along
     if (hv > 3 && player.state !== "crash") {
       const velYaw = Math.atan2(player.vel.x, player.vel.z);
-      let d = velYaw - player.heading;
+      let d = velYaw - facing;
       d = Math.atan2(Math.sin(d), Math.cos(d));
-      targetYaw = player.heading + d * Math.min(1, (hv - 3) / 8) * 0.7;
+      targetYaw = facing + d * Math.min(1, (hv - 3) / 8) * 0.7;
     }
     let dy = targetYaw - camYaw;
     dy = Math.atan2(Math.sin(dy), Math.cos(dy));
