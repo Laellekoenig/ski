@@ -10,11 +10,11 @@ bun run dev     # http://localhost:5173/?silent
 bun run build   # static build in dist/
 ```
 
-The riders look like PS2-era characters: smooth, rounded bodies, painted faces and loud early-2000s outfits. Beni wears a flame jacket, a knit beanie with a wild shock of red fake hair and shades on the back of his head; Mila a bubblegum puffer, fluffy earmuffs and white sunglasses; Fynn an acid-green tall tee, camo cargos and a backwards flat-brim cap over frosted tips; Lumi a colour-block one-piece, a helmet with a faux-fur mohawk and braids. Beni and Fynn are male; Mila and Lumi are female. Each has a distinct silhouette, colour and equipment setup.
+The riders look like PS2-era characters: smooth, rounded bodies, painted faces and loud turn-of-the-millennium outfits. Beni wears a flame jacket, a knit beanie with a wild shock of red fake hair and shades on the back of his head; Mila a bubblegum puffer, fluffy earmuffs and white sunglasses; Rex a Memphis-print one-piece, a mullet under a neon sweatband and gold aviators; Kenji a lightning-bolt speed suit with a race bib, a full-face helmet and a gold mirror visor; Zoe a holographic puffer, space buns with butterfly clips and tiny tinted glasses; Dex a tie-dye hoodie, a bucket hat over his locs and round shades; Pip a shark onesie whose toothy hood frames her freckled face. Beni, Rex, Kenji and Dex are male; Mila, Zoe and Pip are female. Each has a distinct silhouette, colour and equipment setup.
 
 ## Controls
 
-Choose one of four human riders with **1–4**, left/right arrows, or their name tags. Press **Enter** to start. Gamepads can choose with the D-pad or shoulder buttons and start with A or Start.
+Choose one of seven human riders with **1–7**, left/right arrows, or their name tags. Press **Enter** to start. Gamepads can choose with the D-pad or shoulder buttons and start with A or Start.
 
 | Key | Action |
 | --- | --- |

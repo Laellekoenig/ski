@@ -143,7 +143,7 @@ export class Input {
     let startPressed = this.pressed.has("Enter") || this.pressed.has("NumpadEnter") || this.pressed.has("Space");
     let characterPressed = -1;
     for (const code of this.pressed) {
-      const match = /^(?:Digit|Numpad)([1-4])$/.exec(code);
+      const match = /^(?:Digit|Numpad)([1-7])$/.exec(code);
       if (match) characterPressed = Number(match[1]) - 1;
     }
     let characterStep = (this.pressed.has("ArrowRight") ? 1 : 0) - (this.pressed.has("ArrowLeft") ? 1 : 0);

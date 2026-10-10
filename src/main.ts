@@ -178,7 +178,8 @@ function updateCamera(dt: number) {
     titleTime += dt;
     camera.fov = 50;
     const halfH = Math.tan(THREE.MathUtils.degToRad(camera.fov / 2));
-    const fit = (lineup.halfWidth + 1) / (halfH * camera.aspect);
+    // leave room for the lean toward the chosen friend and for the skis lying nearer the camera
+    const fit = (lineup.halfWidth * 1.25 + 1) / (halfH * camera.aspect);
     const wantDist = lineup.launching ? 5.2 : Math.max(6.5, fit);
     if (!shotDist) {
       shotDist = wantDist;
