@@ -35,6 +35,15 @@ const SWING_SHED_MAX = 6;
 const SWING_MIN_SPEED = 4;
 /** Landing harder than this into the snow (m/s along its normal) folds the legs and throws the rider. */
 const CRASH_IMPACT = 15;
+/** Landing a spin: skis within this of the line of travel (tips or tails first) touch down clean, rad. */
+const LAND_CLEAN = 0.38;
+/** Further round than this and the edges catch: a fall. Fast it is tight, slow there is more slack. */
+const LAND_CATCH_FAST = 0.72;
+const LAND_CATCH_SLOW = 1.05;
+/** Slower than this a crooked landing just skids round. */
+const LAND_CATCH_MIN_SPEED = 3;
+/** Share of the speed a landing right at the edge of a fall scrubs off as it skids straight. */
+const LAND_SCRUB = 0.4;
 /** After a fall: the screen washes out to snow white, the rider is back on the skis, and it clears. */
 const FADE_OUT = 0.35;
 const FADE_HOLD = 0.15;
@@ -386,11 +395,12 @@ export class Player {
     else if (this.grounded && hv < 0.3) this.switch = false;
   }
 
-  private startSwing(side: number, speed: number) {
+  /** `side` 0 pivots nowhere: the skis just skid, as after a crooked landing. */
+  private startSwing(side: number, speed: number, shed = SWING_SHED) {
     this.swingT = SWING_TIME;
     this.swingSide = Math.sign(side);
     // the envelope averages 2/π, so this sheds exactly the planned speed over the swing
-    this.swingDecel = Math.min(speed * SWING_SHED, SWING_SHED_MAX) / (SWING_TIME * 2 / Math.PI);
+    this.swingDecel = Math.min(speed * shed, SWING_SHED_MAX) / (SWING_TIME * 2 / Math.PI);
     this.squash = Math.max(this.squash, 0.3);
     this.cloudAcc = 18; // the opening puff
     this.events.onSwing?.();
@@ -412,18 +422,25 @@ export class Player {
     this.grounded = true;
     const air = this.airTime;
 
-    if (air > 0.25) {
+    if (air > 0.25 || Math.abs(this.spin) > LAND_CLEAN) {
       // how well do the skis line up with the direction of travel?
       const hv = Math.hypot(this.vel.x, this.vel.z);
       const fx = Math.sin(this.heading);
       const fz = Math.cos(this.heading);
       const cos = hv > 1 ? (this.vel.x * fx + this.vel.z * fz) / hv : 1;
-      if ((hv > 6 && Math.abs(cos) < 0.45) || impact > CRASH_IMPACT) {
+      // off the line by this much, whichever end leads: 0 straight, π/2 fully sideways
+      const off = Math.acos(Math.min(1, Math.abs(cos)));
+      const limit = lerp(LAND_CATCH_SLOW, LAND_CATCH_FAST, smoothstep(4, 14, hv));
+      if ((hv > LAND_CATCH_MIN_SPEED && off > limit) || impact > CRASH_IMPACT) {
         this.crash(hit, dt);
         return;
+      }
+      // landed backwards: ride it out switch
+      this.switch = cos < 0;
+      if (off > LAND_CLEAN && hv > LAND_CATCH_MIN_SPEED) {
+        // sketchy: the skis skid round under the rider, scrubbing speed the nearer it came to a fall
+        this.startSwing(0, hv, LAND_SCRUB * smoothstep(LAND_CLEAN, limit, off));
       } else {
-        // landed backwards: ride it out switch
-        this.switch = cos < 0;
         const turns = Math.round(Math.abs(this.spin) / Math.PI) * 180;
         if (turns >= 180) this.events.onTrick?.(`${turns}${this.switch ? " switch" : ""}!`);
         else if (air > 1.2) this.events.onTrick?.("Big air!");
