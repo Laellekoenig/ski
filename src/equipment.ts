@@ -39,6 +39,11 @@ function topsheet(color: number, accent: number, style: string) {
   return texture;
 }
 
+/** Tail and tip of the ski along its length, and the pole from grip to tip. */
+export const SKI_TAIL = -0.88;
+export const SKI_TIP = 0.98;
+export const POLE_LENGTH = 0.965;
+
 /** Continuous sidecut, rounded shovel, camber and steel edges. Points +z. */
 export function makeSki(color: number, accent = 0xd6dad8, style = "freeride") {
   const ski = new THREE.Group();
@@ -107,4 +112,18 @@ export function makeBoot(accent: number) {
   for (const y of [0.175, 0.238]) box(boot, 0xadb3b5, [0.126, 0.014, 0.022], [0, y, 0.031], "metal");
   for (const z of [0.07, 0.13]) box(boot, 0xadb3b5, [0.12, 0.018, 0.014], [0, 0.175, z], "metal");
   return boot;
+}
+
+/** Aluminium shaft hanging down from the grip, with the basket near the tip and a wrist loop. */
+export function makePole(accent: number, side: number) {
+  const pole = new THREE.Group();
+  const shaft = gearMesh(new THREE.CylinderGeometry(0.007, 0.005, 0.99, 6), 0x899398, "metal");
+  shaft.position.y = -0.47; pole.add(shaft);
+  const grip = gearMesh(new THREE.CylinderGeometry(0.019, 0.017, 0.105, 8), DARK, "rubber");
+  pole.add(grip);
+  const basket = gearMesh(new THREE.CylinderGeometry(0.032, 0.034, 0.009, 8), accent, "plastic");
+  basket.position.y = -0.9; pole.add(basket);
+  const loop = gearMesh(new THREE.TorusGeometry(0.026, 0.005, 4, 8), DARK, "rubber");
+  loop.position.set(side * 0.018, 0.015, 0); pole.add(loop);
+  return pole;
 }

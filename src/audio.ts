@@ -136,6 +136,11 @@ export class Audio {
     this.burst(0.6, 1500, 0.6);
     this.tone(500, 140, 0.45, "triangle", 0.18);
   }
+  /** A body part hitting the snow during a fall. */
+  thud(impact: number) {
+    this.burst(0.18, 700, Math.min(0.35, impact * 0.03));
+    this.tone(95, 50, 0.12, "sine", Math.min(0.3, impact * 0.025));
+  }
   trick() {
     [523, 659, 784, 1046].forEach((f, i) => this.tone(f, f, 0.18, "triangle", 0.12, i * 0.07));
   }

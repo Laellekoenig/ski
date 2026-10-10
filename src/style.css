@@ -71,6 +71,16 @@ kbd {
   opacity: 0.6;
 }
 
+/* ---- white-out while a fallen rider gets back up */
+
+#fade {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background: #eef3fa;
+  opacity: 0;
+}
+
 /* ---- in-run HUD */
 
 #hud {
