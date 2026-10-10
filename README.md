@@ -31,7 +31,7 @@ Choose one of seven human riders with **1–7**, left/right arrows, or their nam
 | Mouse drag | look around; release to return to the follow camera |
 | `M` | mute |
 
-**Carving:** while a turn is held, a small meter beside the rider's leg fills up. Let go of the turn (or switch to the other side) while the marker is in the green to carve out of it with a burst of speed. Hold on until it reaches the red and the skis wash out, scrubbing off speed until you let go. Gentle `Q` / `E` curves fill slowly and have a wide green zone. Hard `A` / `D` turns fill fast, have a narrow zone and give a slightly bigger boost. The boost fades out toward 26 m/s, so carving cannot push past a sensible top speed.
+**Carving:** while a turn is held, a small meter beside the rider's leg fills up. Switch to the other side while the marker is in the green to carve out of the turn with a burst of speed. Letting go of the turn without switching earns no boost, but costs nothing either: the marker keeps rising, so you can still press the other side while it passes through the green. Hold on until it reaches the red and the skis wash out, scrubbing off speed until you let go. Gentle `Q` / `E` curves fill slowly and have a wide green zone. Hard `A` / `D` turns fill fast, have a narrow zone and give a slightly bigger boost. The boost fades out toward 26 m/s, so carving cannot push past a sensible top speed.
 
 Gamepads: left stick steers, A jumps, triggers tuck/brake, right bumper ducks, Y resets, Start pauses.
 

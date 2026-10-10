@@ -111,7 +111,7 @@ kbd {
   opacity: 0.6;
 }
 
-/* carve timing, beside the rider's leg: release in the green, don't ride into the red */
+/* carve timing, beside the rider's leg: switch edges in the green, don't ride into the red */
 #carve-meter {
   --charge: 0;
   --lo: 0.6;

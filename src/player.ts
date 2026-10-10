@@ -34,8 +34,9 @@ const SWING_SHED = 0.3;
 const SWING_SHED_MAX = 6;
 const SWING_MIN_SPEED = 4;
 /**
- * Carve timing: holding a turn fills the meter by the rider's leg. Let go (or switch edges)
+ * Carve timing: holding a turn fills the meter by the rider's leg. Switch to the other edge
  * in the sweet spot for a burst of speed; hold on into the red and the skis wash out, scrubbing speed.
+ * Letting go short of the red costs nothing, but only the edge change earns the boost.
  * Gentle Q / E curves fill slowly with a wide sweet spot, hard A / D turns fill fast with a narrow one.
  */
 const CARVE_MIN_SPEED = 5;
@@ -83,8 +84,10 @@ export interface CarveMeter {
   sweetLo: number;
   sweetHi: number;
   red: number;
-  /** how the last turn ended: hit the sweet spot, or held into the red */
-  result: "" | "carve" | "wash";
+  /** this turn was held into the red */
+  wash: boolean;
+  /** seconds since the last well-timed edge change */
+  carved: number;
   /** seconds since the turn was let go */
   released: number;
 }
@@ -122,7 +125,7 @@ export class Player {
   fade = 0;
   /** Riding backwards: the tails lead, after landing a 180 or spinning one off a hop. */
   switch = false;
-  readonly carve: CarveMeter = { side: 0, charge: 0, sweetLo: 0, sweetHi: 0, red: CARVE_RED, result: "", released: Infinity };
+  readonly carve: CarveMeter = { side: 0, charge: 0, sweetLo: 0, sweetHi: 0, red: CARVE_RED, wash: false, carved: Infinity, released: Infinity };
 
   private world: World;
   private particles: Particles;
@@ -391,6 +394,7 @@ export class Player {
       // airborne
       if (this.carve.side) this.endCarve();
       this.carve.released += dt;
+      this.carve.carved += dt;
       this.airTime += dt;
       this.vel.y -= G * dt;
       const airSpeed = this.vel.length();
@@ -458,15 +462,16 @@ export class Player {
     else if (this.grounded && hv < 0.3) this.switch = false;
   }
 
-  /** Fill the meter while a turn is held; letting go or switching edges is the moment that counts. */
+  /** Fill the meter while a turn is held; switching to the other edge is the moment that counts. */
   private carveTurn(dt: number, input: InputState, speed: number, swing: number) {
     const c = this.carve;
     c.released += dt;
+    c.carved += dt;
     const side = Math.abs(input.steer) > 0.15 ? Math.sign(input.steer) : 0;
     if (c.side && (input.brake || swing > 0)) this.endCarve();
-    if (c.side && side !== c.side) {
+    if (c.side && side === -c.side) {
       if (c.charge >= c.sweetLo && c.charge <= c.sweetHi) {
-        c.result = "carve";
+        c.carved = 0;
         this.boostT = CARVE_BOOST_TIME;
         this.boostAcc = lerp(CARVE_BOOST_GENTLE, CARVE_BOOST_HARD, this.carveHard) / CARVE_BOOST_TIME;
         this.squash = Math.max(this.squash, 0.2);
@@ -477,19 +482,28 @@ export class Player {
     if (side && !c.side && speed > CARVE_MIN_SPEED && !input.brake && swing <= 0) {
       c.side = side;
       c.charge = 0;
-      c.result = "";
+      c.wash = false;
     }
     if (!c.side) return;
+    // let go: the edges flatten without a penalty, and the meter runs on so the edge change
+    // can still be timed; once it's past the sweet spot the turn simply ends
+    const held = side === c.side;
+    if (!held && c.charge > c.sweetHi) {
+      this.endCarve();
+      return;
+    }
 
-    // the sweet spot follows the keys held, so easing from A onto Q mid-turn widens it
-    this.carveHard = THREE.MathUtils.clamp((Math.abs(input.steer) - GENTLE_STEER) / (1 - GENTLE_STEER), 0, 1);
-    const half = lerp(CARVE_SWEET_GENTLE, CARVE_SWEET_HARD, this.carveHard);
-    c.sweetLo = CARVE_SWEET - half;
-    c.sweetHi = CARVE_SWEET + half;
+    if (held) {
+      // the sweet spot follows the keys held, so easing from A onto Q mid-turn widens it
+      this.carveHard = THREE.MathUtils.clamp((Math.abs(input.steer) - GENTLE_STEER) / (1 - GENTLE_STEER), 0, 1);
+      const half = lerp(CARVE_SWEET_GENTLE, CARVE_SWEET_HARD, this.carveHard);
+      c.sweetLo = CARVE_SWEET - half;
+      c.sweetHi = CARVE_SWEET + half;
+    }
     const was = c.charge;
     c.charge = Math.min(1, c.charge + dt / lerp(CARVE_FILL_GENTLE, CARVE_FILL_HARD, this.carveHard));
-    if (was < CARVE_RED && c.charge >= CARVE_RED) {
-      c.result = "wash";
+    if (held && was < CARVE_RED && c.charge >= CARVE_RED) {
+      c.wash = true;
       this.events.onWashOut?.();
     }
   }
