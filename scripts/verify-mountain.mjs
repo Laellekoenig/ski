@@ -94,7 +94,8 @@ export async function verifyMountain(game) {
       topSpeed = Math.max(topSpeed, player.speed);
     }
     check('Turning back and forth cannot pump up speed', topSpeed < 25);
-    // the same rhythm released in the carve meter's sweet spot, untimed vs. timed, ducked for the most speed
+    // the same rhythm switching edges in the carve meter's sweet spot, untimed vs. timed, ducked for the most speed
+    // (a short gap between the keys, as on a keyboard: the meter runs on until the other edge is pressed)
     const carveRun = (hold) => {
       player.spawnAt(0, 250, 0);
       step(5, { tuck: true });
@@ -111,9 +112,24 @@ export async function verifyMountain(game) {
       player.events = {};
       return { avg: sum / (40 * hold * 120), top, carves };
     };
-    const untimed = carveRun(0.4);
-    const timed = carveRun(0.6);
+    const untimed = carveRun(0.3);
+    const timed = carveRun(0.5);
     check('Timed carves gain speed but stay under the top speed', timed.carves > 30 && untimed.carves === 0 && timed.avg > untimed.avg + 2 && timed.top < 27);
+    // letting go in the sweet spot without switching edges earns nothing, and costs nothing
+    const releaseRun = (steer) => {
+      player.spawnAt(0, 250, 0);
+      step(5, { tuck: true });
+      let carves = 0, washes = 0;
+      player.events = { onCarve: () => carves++, onWashOut: () => washes++ };
+      step(0.6, { duck: true, steer: 1 });
+      const before = player.speed;
+      step(0.5, { duck: true, steer });
+      player.events = {};
+      return { carves, washes, gain: player.speed - before };
+    };
+    const letGo = releaseRun(0);
+    const heldOn = releaseRun(1);
+    check('Letting go in the sweet spot neither boosts nor scrubs', letGo.carves === 0 && letGo.washes === 0 && heldOn.washes === 1 && letGo.gain > heldOn.gain + 1);
     player.spawnAt(0, 250, 0);
     step(3);
     step(0.7, { steer: 0.6 });
